@@ -1,12 +1,16 @@
-import { supabase } from '@/lib/supabase'
-
-export default async function Home() {
-  const { data, error } = await supabase.from('users').select('*')
-
+export default function Home() {
   return (
     <div>
-      <h1>Test Supabase</h1>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <h1>🌾 RiceShare</h1>
+      <p>Sistem Manajemen Panen & Bagi Hasil</p>
+
+      <br />
+
+      <ul>
+        <li>✔ Input data panen</li>
+        <li>✔ Hitung otomatis bagi hasil</li>
+        <li>✔ Dashboard visual</li>
+      </ul>
     </div>
   )
 }
