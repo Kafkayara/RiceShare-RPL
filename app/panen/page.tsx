@@ -11,39 +11,25 @@ export default function PanenPage() {
   const [lahanList, setLahanList] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  // ambil data lahan
   useEffect(() => {
     const fetchLahan = async () => {
-      const { data, error } = await supabase.from("lahan").select("*")
-      if (error) {
-        console.error(error)
-        alert("Gagal mengambil data lahan")
-      } else {
-        setLahanList(data || [])
-      }
+      const { data } = await supabase.from("lahan").select("*")
+      setLahanList(data || [])
     }
-
     fetchLahan()
   }, [])
 
   const handleSubmit = async (e: any) => {
-  e.preventDefault()
+    e.preventDefault()
 
-  if (!lahanId || !berat || !tanggal) {
-    alert("Semua field harus diisi!")
-    return
-  }
+    if (!lahanId || !berat || !tanggal) {
+      alert("Semua field harus diisi!")
+      return
+    }
 
-  if (parseFloat(berat) <= 0) {
-    alert("Berat harus lebih dari 0")
-    return
-  }
+    setLoading(true)
 
-  setLoading(true)
-
-  try {
-    // 1. simpan panen
-    const { data: panen, error: panenError } = await supabase
+    const { data: panen } = await supabase
       .from("panen")
       .insert([
         {
@@ -54,98 +40,82 @@ export default function PanenPage() {
       ])
       .select()
 
-    if (panenError) throw panenError
+    const panen_id = panen?.[0]?.id
 
-    const panen_id = panen[0].id
-
-    // 2. hitung
     const total_beras = parseFloat(berat) * 0.65
-    const porsi_pemilik = total_beras * 0.5
-    const porsi_pengelola = total_beras * 0.5
+    const porsi = total_beras * 0.5
 
-    // 🔥 3. simpan bagi hasil (FIX DI SINI)
-    const { error: bagiError } = await supabase
-      .from("bagi_hasil")
-      .insert([
-        {
-          panen_id,
-          total_beras,
-          porsi_pemilik,
-          porsi_pengelola
-        }
-      ])
+    await supabase.from("bagi_hasil").insert([
+      {
+        panen_id,
+        total_beras,
+        porsi_pemilik: porsi,
+        porsi_pengelola: porsi
+      }
+    ])
 
-    if (bagiError) {
-      alert("Error bagi hasil: " + bagiError.message)
-      console.log(bagiError)
-      return
-    }
+    setResult({ total_beras, porsi })
 
-    // 4. tampilkan hasil
-    setResult({
-      total_beras,
-      porsi_pemilik,
-      porsi_pengelola
-    })
-
-    // reset form
     setLahanId("")
     setBerat("")
     setTanggal("")
-  } catch (err: any) {
-    alert("Terjadi error: " + err.message)
-  } finally {
     setLoading(false)
   }
-}
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Input Panen</h1>
+    <div className="flex justify-center mt-10">
+      <div className="bg-gray-900 p-6 rounded-xl w-full max-w-md shadow-lg">
 
-      <form onSubmit={handleSubmit}>
-        
-        <select value={lahanId} onChange={(e) => setLahanId(e.target.value)}>
-          <option value="">Pilih Lahan</option>
-          {lahanList.map((lahan) => (
-            <option key={lahan.id} value={lahan.id}>
-              {lahan.lokasi} - {lahan.luas} m²
-            </option>
-          ))}
-        </select>
+        <h1 className="text-xl font-bold mb-4">🌾 Input Panen</h1>
 
-        <br />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
 
-        <input
-          type="number"
-          placeholder="Berat GKP"
-          value={berat}
-          onChange={(e) => setBerat(e.target.value)}
-        />
+          <select
+            className="bg-gray-800 p-2 rounded text-white"
+            value={lahanId}
+            onChange={(e) => setLahanId(e.target.value)}
+          >
+            <option value="">Pilih Lahan</option>
+            {lahanList.map((lahan) => (
+              <option key={lahan.id} value={lahan.id}>
+                {lahan.lokasi} - {lahan.luas} m²
+              </option>
+            ))}
+          </select>
 
-        <br />
+          <input
+            type="number"
+            placeholder="Berat GKP"
+            className="bg-gray-800 p-2 rounded text-white"
+            value={berat}
+            onChange={(e) => setBerat(e.target.value)}
+          />
 
-        <input
-          type="date"
-          value={tanggal}
-          onChange={(e) => setTanggal(e.target.value)}
-        />
+          <input
+            type="date"
+            className="bg-gray-800 p-2 rounded text-white"
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value)}
+          />
 
-        <br />
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-green-500 hover:bg-green-600 p-2 rounded font-semibold"
+          >
+            {loading ? "Menyimpan..." : "Simpan"}
+          </button>
+        </form>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Menyimpan..." : "Simpan"}
-        </button>
-      </form>
-
-      {result && (
-        <div style={{ marginTop: 20 }}>
-          <h2>Hasil</h2>
-          <p>Total Beras: {result?.total_beras?.toFixed(2)}</p>
-          <p>Pemilik: {result?.porsi_pemilik?.toFixed(2)}</p>
-          <p>Pengelola: {result?.porsi_pengelola?.toFixed(2)}</p>
-        </div>
-      )}
+        {result && (
+          <div className="mt-6 bg-gray-800 p-4 rounded">
+            <h2 className="font-bold mb-2">Hasil</h2>
+            <p>🍚 Total Beras: {result.total_beras.toFixed(2)}</p>
+            <p>👤 Pemilik: {result.porsi.toFixed(2)}</p>
+            <p>🧑‍🌾 Pengelola: {result.porsi.toFixed(2)}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
