@@ -16,7 +16,6 @@ export default function RootLayout({
           <h2 style={{ margin: 0 }}>🌾 RiceShare</h2>
 
           <div style={{ display: "flex", gap: 20 }}>
-            <Link href="/">Home</Link>
             <Link href="/panen">Input Panen</Link>
             <Link href="/dashboard">Dashboard</Link>
           </div>
