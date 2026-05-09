@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { syncLahanStatus } from "@/lib/syncLahanStatus"
 
 type UserProfile = {
   id: string
@@ -10,6 +11,8 @@ type UserProfile = {
   email: string
   role: "pemilik" | "pengelola"
 }
+
+type TimelineOverrides = Record<string, string>
 
 type JadwalTanam = {
   id: string
@@ -20,6 +23,16 @@ type JadwalTanam = {
   jumlah_benih?: number | null
   catatan?: string | null
   created_at?: string | null
+  timeline_overrides?: TimelineOverrides | null
+}
+
+type AktivitasLog = {
+  id: string
+  jenis_aktivitas: string
+  tanggal?: string | null
+  deskripsi?: string | null
+  bukti?: string | null
+  created_at?: string | null
 }
 
 type LahanDetail = {
@@ -28,13 +41,115 @@ type LahanDetail = {
   luas: number
   status: string
   jadwal_tanam?: JadwalTanam[]
+  aktivitas_log?: AktivitasLog[]
 }
 
 type TimelineItem = {
+  key: string
   label: string
-  range: string
-  tanggal: string
+  startDate: string
+  endDate: string
+  tanggalText: string
   status: "selesai" | "berjalan" | "belum"
+}
+
+type TimelineTemplate = {
+  key: string
+  label: string
+  startOffset: number
+  endOffset: number
+}
+
+type ActiveTab = "timeline" | "detail"
+
+const timelineTemplates: TimelineTemplate[] = [
+  {
+    key: "mulai_tanam",
+    label: "Mulai Tanam",
+    startOffset: 0,
+    endOffset: 0,
+  },
+  {
+    key: "cek_adaptasi_bibit",
+    label: "Cek Adaptasi Bibit",
+    startOffset: 1,
+    endOffset: 7,
+  },
+  {
+    key: "pemupukan_1",
+    label: "Pemupukan 1",
+    startOffset: 7,
+    endOffset: 14,
+  },
+  {
+    key: "pantau_pertumbuhan_awal",
+    label: "Pantau Pertumbuhan Awal",
+    startOffset: 14,
+    endOffset: 21,
+  },
+  {
+    key: "persiapan_pengendalian_gulma",
+    label: "Persiapan Pengendalian Gulma",
+    startOffset: 21,
+    endOffset: 30,
+  },
+  {
+    key: "bersihkan_gulma",
+    label: "Bersihkan Gulma",
+    startOffset: 30,
+    endOffset: 30,
+  },
+  {
+    key: "pemupukan_2",
+    label: "Pemupukan 2",
+    startOffset: 35,
+    endOffset: 40,
+  },
+  {
+    key: "perawatan_lanjutan",
+    label: "Perawatan Lanjutan",
+    startOffset: 40,
+    endOffset: 60,
+  },
+  {
+    key: "cek_hama",
+    label: "Cek Hama",
+    startOffset: 60,
+    endOffset: 69,
+  },
+  {
+    key: "menjelang_panen",
+    label: "Menjelang Panen",
+    startOffset: 70,
+    endOffset: 85,
+  },
+  {
+    key: "panen_estimasi",
+    label: "Panen Estimasi",
+    startOffset: 80,
+    endOffset: 105,
+  },
+  {
+    key: "masa_istirahat",
+    label: "Masa Istirahat",
+    startOffset: 106,
+    endOffset: 119,
+  },
+  {
+    key: "siap_tanam_kembali",
+    label: "Siap Tanam Kembali",
+    startOffset: 120,
+    endOffset: 120,
+  },
+]
+
+function getTodayDateInputValue() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, "0")
+  const day = String(today.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
 }
 
 function addDays(dateString: string, days: number) {
@@ -59,15 +174,6 @@ function differenceInDays(startDate: string, endDate: string) {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
-function getTodayDateInputValue() {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, "0")
-  const day = String(today.getDate()).padStart(2, "0")
-
-  return `${year}-${month}-${day}`
-}
-
 function formatDateId(dateString?: string | null) {
   if (!dateString) return "-"
 
@@ -75,6 +181,18 @@ function formatDateId(dateString?: string | null) {
     day: "numeric",
     month: "long",
     year: "numeric",
+  })
+}
+
+function formatDateTimeId(dateString?: string | null) {
+  if (!dateString) return "-"
+
+  return new Date(dateString).toLocaleString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   })
 }
 
@@ -115,7 +233,7 @@ function getStatusStyle(status?: string | null) {
     case "istirahat":
       return "bg-gray-100 text-gray-700 border-gray-200"
     case "siap_tanam_kembali":
-      return "bg-emerald-100 text-emerald-700 border-emerald-200"
+      return "bg-purple-100 text-purple-700 border-purple-200"
     case "belum_digunakan":
       return "bg-slate-100 text-slate-700 border-slate-200"
     default:
@@ -123,185 +241,218 @@ function getStatusStyle(status?: string | null) {
   }
 }
 
+function formatTimelineDate(startDate: string, endDate: string) {
+  if (startDate === endDate) return formatDateId(endDate)
+  return `${formatDateId(startDate)} - ${formatDateId(endDate)}`
+}
+
 function getTimelineStatus(
-  hariKe: number | null,
-  startDay: number,
-  endDay: number
+  today: string,
+  startDate: string,
+  endDate: string,
+  label: string,
+  aktivitasLogs: AktivitasLog[]
 ): "selesai" | "berjalan" | "belum" {
-  if (hariKe === null) return "belum"
+  const sudahAdaLog = aktivitasLogs.some((log) => {
+    return (
+      log.jenis_aktivitas === label &&
+      !!log.tanggal &&
+      log.tanggal >= startDate &&
+      log.tanggal <= endDate
+    )
+  })
 
-  if (hariKe > endDay) return "selesai"
-  if (hariKe >= startDay && hariKe <= endDay) return "berjalan"
+  if (sudahAdaLog) return "selesai"
+  if (today >= startDate && today <= endDate) return "berjalan"
 
   return "belum"
 }
 
-function getSingleDayTimelineStatus(
-  hariKe: number | null,
-  day: number
-): "selesai" | "berjalan" | "belum" {
-  if (hariKe === null) return "belum"
+function buildTimeline(
+  tanggalMulai: string,
+  today: string,
+  overrides: TimelineOverrides = {},
+  aktivitasLogs: AktivitasLog[]
+): TimelineItem[] {
+  const items: TimelineItem[] = []
 
-  if (hariKe > day) return "selesai"
-  if (hariKe === day) return "berjalan"
+  for (let index = 0; index < timelineTemplates.length; index++) {
+    const template = timelineTemplates[index]
+    const previousTemplate = timelineTemplates[index - 1]
+    const previousItem = items[index - 1]
 
-  return "belum"
+    let startDate = ""
+    let endDate = ""
+
+    if (index === 0) {
+      startDate = tanggalMulai
+      endDate = tanggalMulai
+    } else {
+      const previousEndOffset = previousTemplate?.endOffset || 0
+      const gapFromPrevious = template.startOffset - previousEndOffset
+      const duration = template.endOffset - template.startOffset
+
+      startDate = addDays(previousItem.endDate, gapFromPrevious)
+      endDate = addDays(startDate, duration)
+    }
+
+    if (overrides[template.key]) {
+      endDate = overrides[template.key]
+
+      if (template.startOffset === template.endOffset) {
+        startDate = endDate
+      }
+    }
+
+    items.push({
+      key: template.key,
+      label: template.label,
+      startDate,
+      endDate,
+      tanggalText: formatTimelineDate(startDate, endDate),
+      status: getTimelineStatus(today, startDate, endDate, template.label, aktivitasLogs),
+    })
+  }
+
+  return items
 }
 
-function buildTimeline(tanggalMulai: string, hariKe: number | null): TimelineItem[] {
-  return [
-    {
-      label: "Pindah Tanam",
-      range: "H0",
-      tanggal: formatDateId(tanggalMulai),
-      status: getSingleDayTimelineStatus(hariKe, 0),
-    },
-    {
-      label: "Cek Adaptasi Bibit",
-      range: "H1–H7",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 1))} – ${formatDateId(
-        addDays(tanggalMulai, 7)
-      )}`,
-      status: getTimelineStatus(hariKe, 1, 7),
-    },
-    {
-      label: "Pupuk Awal",
-      range: "H7–H14",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 7))} – ${formatDateId(
-        addDays(tanggalMulai, 14)
-      )}`,
-      status: getTimelineStatus(hariKe, 7, 14),
-    },
-    {
-      label: "Pantau Pertumbuhan Awal",
-      range: "H14–H21",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 14))} – ${formatDateId(
-        addDays(tanggalMulai, 21)
-      )}`,
-      status: getTimelineStatus(hariKe, 14, 21),
-    },
-    {
-      label: "Persiapan Pengendalian Gulma",
-      range: "H21–H30",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 21))} – ${formatDateId(
-        addDays(tanggalMulai, 30)
-      )}`,
-      status: getTimelineStatus(hariKe, 21, 30),
-    },
-    {
-      label: "Bersihkan Gulma",
-      range: "H30",
-      tanggal: formatDateId(addDays(tanggalMulai, 30)),
-      status: getSingleDayTimelineStatus(hariKe, 30),
-    },
-    {
-      label: "Pupuk Lanjutan",
-      range: "H35–H40",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 35))} – ${formatDateId(
-        addDays(tanggalMulai, 40)
-      )}`,
-      status: getTimelineStatus(hariKe, 35, 40),
-    },
-    {
-      label: "Perawatan Lanjutan",
-      range: "H40–H60",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 40))} – ${formatDateId(
-        addDays(tanggalMulai, 60)
-      )}`,
-      status: getTimelineStatus(hariKe, 40, 60),
-    },
-    {
-      label: "Pengawasan Generatif",
-      range: "H60",
-      tanggal: formatDateId(addDays(tanggalMulai, 60)),
-      status: getSingleDayTimelineStatus(hariKe, 60),
-    },
-    {
-      label: "Menjelang Panen",
-      range: "H70–H85",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 70))} – ${formatDateId(
-        addDays(tanggalMulai, 85)
-      )}`,
-      status: getTimelineStatus(hariKe, 70, 85),
-    },
-    {
-      label: "Periode Panen",
-      range: "H80–H105",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 80))} – ${formatDateId(
-        addDays(tanggalMulai, 105)
-      )}`,
-      status: getTimelineStatus(hariKe, 80, 105),
-    },
-    {
-      label: "Masa Istirahat",
-      range: "H106–H119",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 106))} – ${formatDateId(
-        addDays(tanggalMulai, 119)
-      )}`,
-      status: getTimelineStatus(hariKe, 106, 119),
-    },
-    {
-      label: "Siap Tanam Kembali",
-      range: "H120+",
-      tanggal: `Mulai ${formatDateId(addDays(tanggalMulai, 120))}`,
-      status: hariKe !== null && hariKe >= 120 ? "berjalan" : "belum",
-    },
-  ]
+function getCurrentTimelineIndex(timeline: TimelineItem[]) {
+  const runningIndex = timeline.findIndex((item) => item.status === "berjalan")
+
+  if (runningIndex !== -1) return runningIndex
+
+  const firstUpcomingIndex = timeline.findIndex((item) => item.status === "belum")
+
+  if (firstUpcomingIndex !== -1) {
+    return Math.max(firstUpcomingIndex - 1, 0)
+  }
+
+  return timeline.length - 1
 }
 
-function getCurrentStage(hariKe: number | null) {
-  if (hariKe === null) return "Belum ada siklus tanam aktif"
+function getCurrentStage(timeline: TimelineItem[]) {
+  if (timeline.length === 0) return "Belum ada siklus tanam"
 
-  if (hariKe < 0) return "Belum dimulai"
-  if (hariKe === 0) return "Pindah Tanam"
-  if (hariKe <= 7) return "Cek Adaptasi Bibit"
-  if (hariKe <= 14) return "Pupuk Awal"
-  if (hariKe <= 21) return "Pantau Pertumbuhan Awal"
-  if (hariKe <= 30) return "Persiapan / Pembersihan Gulma"
-  if (hariKe <= 40) return "Pupuk Lanjutan"
-  if (hariKe <= 60) return "Perawatan Lanjutan"
-  if (hariKe <= 69) return "Pengawasan Generatif"
-  if (hariKe <= 79) return "Menjelang Panen"
-  if (hariKe <= 105) return "Periode Panen"
-  if (hariKe <= 119) return "Masa Istirahat"
-  return "Siap Tanam Kembali"
+  const current = timeline.find((item) => item.status === "berjalan")
+  if (current) return current.label
+
+  const firstUpcoming = timeline.find((item) => item.status === "belum")
+  if (firstUpcoming) return "Menunggu tahap berikutnya"
+
+  return "Siklus selesai"
 }
 
-function getTimelineBadgeStyle(status: TimelineItem["status"]) {
+function getTimelineDotStyle(status: TimelineItem["status"]) {
   switch (status) {
     case "selesai":
-      return "bg-green-100 text-green-700"
+      return "border-green-600 bg-green-600 text-white"
     case "berjalan":
-      return "bg-yellow-100 text-yellow-700"
+      return "border-green-600 bg-green-100 text-green-700"
     case "belum":
-      return "bg-gray-100 text-gray-600"
+      return "border-gray-300 bg-white text-gray-400"
     default:
-      return "bg-gray-100 text-gray-600"
+      return "border-gray-300 bg-white text-gray-400"
   }
 }
 
-function getTimelineLabel(status: TimelineItem["status"]) {
+function getTimelineTextStyle(status: TimelineItem["status"]) {
   switch (status) {
     case "selesai":
-      return "Selesai"
     case "berjalan":
-      return "Berjalan"
+      return "text-gray-900"
     case "belum":
-      return "Belum"
+      return "text-gray-500"
     default:
-      return "-"
+      return "text-gray-500"
   }
 }
 
 export default function DetailLahanPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
+
   const lahanId = params.id as string
+  const shouldOpenEditJadwal = searchParams.get("open_edit_jadwal") === "1"
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [checkingUser, setCheckingUser] = useState(true)
   const [loadingData, setLoadingData] = useState(true)
+
   const [lahan, setLahan] = useState<LahanDetail | null>(null)
+  const [activeTab, setActiveTab] = useState<ActiveTab>("timeline")
+
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [autoOpenedEditFromUrl, setAutoOpenedEditFromUrl] = useState(false)
+
+  const [editTanggalMulai, setEditTanggalMulai] = useState("")
+  const [editTimelineDates, setEditTimelineDates] = useState<Record<string, string>>({})
+  const [editVarietasPadi, setEditVarietasPadi] = useState("")
+  const [editJumlahBenih, setEditJumlahBenih] = useState("")
+  const [editCatatan, setEditCatatan] = useState("")
+
+  const today = getTodayDateInputValue()
+
+  const fetchLahanDetail = async () => {
+    setLoadingData(true)
+
+    await syncLahanStatus()
+
+    const { data: lahanData, error: lahanError } = await supabase
+      .from("lahan")
+      .select("id, lokasi, luas, status")
+      .eq("id", lahanId)
+      .single()
+
+    if (lahanError || !lahanData) {
+      console.log("FETCH LAHAN ERROR:", lahanError)
+      setLahan(null)
+      setLoadingData(false)
+      return
+    }
+
+    const { data: jadwalData, error: jadwalError } = await supabase
+      .from("jadwal_tanam")
+      .select(`
+        id,
+        tanggal_mulai,
+        tanggal_selesai,
+        status,
+        varietas_padi,
+        jumlah_benih,
+        catatan,
+        created_at,
+        timeline_overrides
+      `)
+      .eq("lahan_id", lahanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+
+    if (jadwalError) {
+      console.log("FETCH JADWAL ERROR:", jadwalError)
+    }
+
+    const { data: logData, error: logError } = await supabase
+      .from("aktivitas_log")
+      .select("id, jenis_aktivitas, tanggal, deskripsi, bukti, created_at")
+      .eq("lahan_id", lahanId)
+      .order("tanggal", { ascending: false })
+      .order("created_at", { ascending: false })
+
+    if (logError) {
+      console.log("FETCH AKTIVITAS LOG ERROR:", logError)
+    }
+
+    setLahan({
+      ...lahanData,
+      jadwal_tanam: jadwalData || [],
+      aktivitas_log: logData || [],
+    })
+
+    setLoadingData(false)
+  }
 
   useEffect(() => {
     const savedUser = localStorage.getItem("riceshare_user")
@@ -316,45 +467,234 @@ export default function DetailLahanPage() {
   }, [router])
 
   useEffect(() => {
-    const fetchLahanDetail = async () => {
-      setLoadingData(true)
-
-      const { data, error } = await supabase
-        .from("lahan")
-        .select(`
-          id,
-          lokasi,
-          luas,
-          status,
-          jadwal_tanam (
-            id,
-            tanggal_mulai,
-            tanggal_selesai,
-            status,
-            varietas_padi,
-            jumlah_benih,
-            catatan,
-            created_at
-          )
-        `)
-        .eq("id", lahanId)
-        .single()
-
-      if (error) {
-        console.log("FETCH DETAIL LAHAN ERROR:", error)
-        setLahan(null)
-        setLoadingData(false)
-        return
-      }
-
-      setLahan(data)
-      setLoadingData(false)
-    }
-
     if (lahanId) {
       fetchLahanDetail()
     }
   }, [lahanId])
+
+  const jadwalTerbaru = lahan?.jadwal_tanam?.[0]
+  const aktivitasLogs = useMemo(() => lahan?.aktivitas_log || [], [lahan?.aktivitas_log])
+  const overrides = jadwalTerbaru?.timeline_overrides || {}
+
+  const timeline = useMemo(() => {
+    if (!jadwalTerbaru?.tanggal_mulai) return []
+
+    return buildTimeline(
+      jadwalTerbaru.tanggal_mulai,
+      today,
+      overrides,
+      aktivitasLogs
+    )
+  }, [
+    jadwalTerbaru?.tanggal_mulai,
+    today,
+    JSON.stringify(overrides),
+    aktivitasLogs,
+  ])
+
+  const aktivitasTerbaru = useMemo(() => {
+    return aktivitasLogs.slice(0, 5)
+  }, [aktivitasLogs])
+
+  const currentTimelineIndex =
+    timeline.length > 0 ? getCurrentTimelineIndex(timeline) : -1
+
+  const currentTimeline = timeline[currentTimelineIndex]
+
+  const editableTimelineItems =
+    currentTimelineIndex <= 0
+      ? timeline.slice(0, 1)
+      : timeline.slice(currentTimelineIndex - 1, currentTimelineIndex + 1)
+
+  const editMaxDate = currentTimeline?.endDate || today
+
+  const hariKe =
+    jadwalTerbaru?.tanggal_mulai &&
+    [
+      "masa_tanam_aktif",
+      "menjelang_panen",
+      "panen_selesai",
+      "istirahat",
+      "siap_tanam_kembali",
+      "tanam",
+    ].includes(lahan?.status || "")
+      ? differenceInDays(jadwalTerbaru.tanggal_mulai, today)
+      : null
+
+  const panenEstimasi = timeline.find((item) => item.key === "panen_estimasi")
+  const siapTanamKembali = timeline.find(
+    (item) => item.key === "siap_tanam_kembali"
+  )
+
+  const estimasiGabahMin = jadwalTerbaru?.jumlah_benih
+    ? jadwalTerbaru.jumlah_benih * 150
+    : null
+
+  const estimasiGabahMax = jadwalTerbaru?.jumlah_benih
+    ? jadwalTerbaru.jumlah_benih * 250
+    : null
+
+  const openEditModal = () => {
+    if (!jadwalTerbaru) {
+      alert("Belum ada jadwal tanam yang bisa diedit.")
+      return
+    }
+
+    const initialEditDates: Record<string, string> = {}
+
+    editableTimelineItems.forEach((item) => {
+      initialEditDates[item.key] = item.endDate
+    })
+
+    setEditTanggalMulai(jadwalTerbaru.tanggal_mulai || "")
+    setEditTimelineDates(initialEditDates)
+    setEditVarietasPadi(jadwalTerbaru.varietas_padi || "")
+    setEditJumlahBenih(
+      jadwalTerbaru.jumlah_benih !== null &&
+        jadwalTerbaru.jumlah_benih !== undefined
+        ? String(jadwalTerbaru.jumlah_benih)
+        : ""
+    )
+    setEditCatatan(jadwalTerbaru.catatan || "")
+    setShowEditModal(true)
+  }
+
+  useEffect(() => {
+    if (!shouldOpenEditJadwal) return
+    if (autoOpenedEditFromUrl) return
+    if (loadingData) return
+    if (!jadwalTerbaru) return
+    if (user?.role !== "pengelola") return
+
+    setAutoOpenedEditFromUrl(true)
+    openEditModal()
+  }, [
+    shouldOpenEditJadwal,
+    autoOpenedEditFromUrl,
+    loadingData,
+    jadwalTerbaru,
+    user,
+  ])
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!jadwalTerbaru) return
+
+    if (!editVarietasPadi.trim()) {
+      alert("Varietas padi wajib diisi.")
+      return
+    }
+
+    const jumlahBenihNumber = parseFloat(editJumlahBenih.replace(",", "."))
+
+    if (!editJumlahBenih || isNaN(jumlahBenihNumber) || jumlahBenihNumber <= 0) {
+      alert("Jumlah benih harus berupa angka lebih dari 0.")
+      return
+    }
+
+    setSavingEdit(true)
+
+    if (currentTimelineIndex <= 0) {
+      if (!editTanggalMulai) {
+        alert("Tanggal mulai tanam wajib diisi.")
+        setSavingEdit(false)
+        return
+      }
+
+      if (editTanggalMulai > editMaxDate) {
+        alert(`Tanggal mulai tanam tidak boleh lebih dari ${formatDateId(editMaxDate)}.`)
+        setSavingEdit(false)
+        return
+      }
+
+      const newTimeline = buildTimeline(editTanggalMulai, today, {}, aktivitasLogs)
+      const newPanenEstimasi = newTimeline.find(
+        (item) => item.key === "panen_estimasi"
+      )
+
+      const { error } = await supabase
+        .from("jadwal_tanam")
+        .update({
+          tanggal_mulai: editTanggalMulai,
+          tanggal_selesai:
+            newPanenEstimasi?.endDate || addDays(editTanggalMulai, 105),
+          varietas_padi: editVarietasPadi.trim(),
+          jumlah_benih: jumlahBenihNumber,
+          catatan: editCatatan.trim() || null,
+          timeline_overrides: {},
+        })
+        .eq("id", jadwalTerbaru.id)
+
+      if (error) {
+        console.log("UPDATE JADWAL ERROR:", error)
+        alert("Gagal mengubah jadwal tanam. Cek console browser.")
+        setSavingEdit(false)
+        return
+      }
+
+      setSavingEdit(false)
+      setShowEditModal(false)
+      await fetchLahanDetail()
+      return
+    }
+
+    const updatedOverrides: TimelineOverrides = {
+      ...(jadwalTerbaru.timeline_overrides || {}),
+    }
+
+    for (const item of editableTimelineItems) {
+      const editedDate = editTimelineDates[item.key]
+
+      if (!editedDate) {
+        alert(`Tanggal ${item.label} wajib diisi.`)
+        setSavingEdit(false)
+        return
+      }
+
+      if (editedDate > editMaxDate) {
+        alert(`Tanggal ${item.label} tidak boleh lebih dari ${formatDateId(editMaxDate)}.`)
+        setSavingEdit(false)
+        return
+      }
+
+      updatedOverrides[item.key] = editedDate
+    }
+
+    const newTimeline = buildTimeline(
+      jadwalTerbaru.tanggal_mulai,
+      today,
+      updatedOverrides,
+      aktivitasLogs
+    )
+
+    const newPanenEstimasi = newTimeline.find(
+      (item) => item.key === "panen_estimasi"
+    )
+
+    const { error } = await supabase
+      .from("jadwal_tanam")
+      .update({
+        tanggal_selesai:
+          newPanenEstimasi?.endDate || jadwalTerbaru.tanggal_selesai,
+        varietas_padi: editVarietasPadi.trim(),
+        jumlah_benih: jumlahBenihNumber,
+        catatan: editCatatan.trim() || null,
+        timeline_overrides: updatedOverrides,
+      })
+      .eq("id", jadwalTerbaru.id)
+
+    if (error) {
+      console.log("UPDATE JADWAL ERROR:", error)
+      alert("Gagal mengubah jadwal tanam. Cek console browser.")
+      setSavingEdit(false)
+      return
+    }
+
+    setSavingEdit(false)
+    setShowEditModal(false)
+    await fetchLahanDetail()
+  }
 
   if (checkingUser) {
     return (
@@ -364,76 +704,34 @@ export default function DetailLahanPage() {
     )
   }
 
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
-  const jadwalTerbaru = lahan?.jadwal_tanam?.[0]
-
-  const today = getTodayDateInputValue()
-
-  const hariKe =
-    jadwalTerbaru?.tanggal_mulai &&
-    ["masa_tanam_aktif", "menjelang_panen", "panen_selesai", "istirahat", "siap_tanam_kembali"].includes(
-      lahan?.status || ""
-    )
-      ? differenceInDays(jadwalTerbaru.tanggal_mulai, today)
-      : null
-
-  const tahapSekarang = getCurrentStage(hariKe)
-
-  const panenMulai = jadwalTerbaru?.tanggal_mulai
-    ? addDays(jadwalTerbaru.tanggal_mulai, 80)
-    : null
-
-  const panenSelesai = jadwalTerbaru?.tanggal_mulai
-    ? addDays(jadwalTerbaru.tanggal_mulai, 105)
-    : null
-
-  const siapTanamKembali = jadwalTerbaru?.tanggal_mulai
-    ? addDays(jadwalTerbaru.tanggal_mulai, 120)
-    : null
-
-  const estimasiGabahMin = jadwalTerbaru?.jumlah_benih
-    ? jadwalTerbaru.jumlah_benih * 150
-    : null
-
-  const estimasiGabahAman = jadwalTerbaru?.jumlah_benih
-    ? jadwalTerbaru.jumlah_benih * 200
-    : null
-
-  const estimasiGabahMax = jadwalTerbaru?.jumlah_benih
-    ? jadwalTerbaru.jumlah_benih * 250
-    : null
-
-  const timeline = jadwalTerbaru?.tanggal_mulai
-    ? buildTimeline(jadwalTerbaru.tanggal_mulai, hariKe)
-    : []
+  const isPengelola = user.role === "pengelola"
 
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900">
       <div className="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-green-700">RiceShare</p>
-            <h1 className="text-2xl font-bold">Detail Lahan</h1>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
+        <header className="mb-6 rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <button
               onClick={() => router.push("/lahan")}
-              className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
             >
-              Kembali
+              ← Kembali
             </button>
 
             <button
               onClick={() => router.push("/dashboard")}
-              className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
             >
               Dashboard
             </button>
           </div>
+
+          <p className="text-sm font-medium text-green-700">RiceShare</p>
+          <h1 className="text-2xl font-bold">
+            {lahan ? `Lahan ${lahan.lokasi}` : "Detail Lahan"}
+          </h1>
         </header>
 
         {loadingData ? (
@@ -442,188 +740,410 @@ export default function DetailLahanPage() {
           </section>
         ) : !lahan ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Data lahan tidak ditemukan.
-            </p>
+            <p className="text-sm text-gray-500">Data lahan tidak ditemukan.</p>
           </section>
         ) : (
           <>
-            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Lokasi Lahan</p>
-                <h2 className="mt-2 text-2xl font-bold">{lahan.lokasi}</h2>
-              </div>
-
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Luas</p>
-                <h2 className="mt-2 text-2xl font-bold">{lahan.luas} m²</h2>
-              </div>
-
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Status</p>
-                <span
-                  className={`mt-3 inline-block rounded-full border px-3 py-1 text-sm font-medium ${getStatusStyle(
-                    lahan.status
-                  )}`}
+            <section className="mb-6 rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="flex border-b text-sm font-medium">
+                <button
+                  onClick={() => setActiveTab("timeline")}
+                  className={`flex-1 px-4 py-3 text-center ${
+                    activeTab === "timeline"
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
                 >
-                  {formatStatus(lahan.status)}
-                </span>
+                  Timeline
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("detail")}
+                  className={`flex-1 px-4 py-3 text-center ${
+                    activeTab === "detail"
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Detail
+                </button>
               </div>
+
+              {activeTab === "timeline" && (
+                <div className="grid grid-cols-1 gap-6 pt-5 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <h2 className="mb-4 font-bold">Progress Musim Tanam</h2>
+
+                    {timeline.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Timeline belum tersedia karena lahan belum memiliki data mulai tanam.
+                      </p>
+                    ) : (
+                      <div className="relative pl-6">
+                        <div className="absolute left-[11px] top-2 h-[calc(100%-20px)] w-px bg-gray-300" />
+
+                        <div className="space-y-5">
+                          {timeline.map((item) => (
+                            <div key={item.key} className="relative">
+                              <div
+                                className={`absolute -left-6 top-1 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${getTimelineDotStyle(
+                                  item.status
+                                )}`}
+                              >
+                                {item.status === "selesai" ? "✓" : ""}
+                              </div>
+
+                              <div className="pl-2">
+                                <p
+                                  className={`font-semibold ${getTimelineTextStyle(
+                                    item.status
+                                  )}`}
+                                >
+                                  {item.label}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {item.tanggalText}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <aside className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <h2 className="mb-4 font-bold">Informasi Lahan</h2>
+
+                    <div className="space-y-3 text-sm">
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Status</p>
+                        <span
+                          className={`mt-1 inline-block rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(
+                            lahan.status
+                          )}`}
+                        >
+                          {formatStatus(lahan.status)}
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Hari Saat Ini</p>
+                        <p className="font-semibold">
+                          {hariKe !== null ? `Hari ke-${hariKe}` : "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Tahap Saat Ini</p>
+                        <p className="font-semibold">
+                          {getCurrentStage(timeline)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Estimasi Panen</p>
+                        <p className="font-semibold">
+                          {panenEstimasi ? panenEstimasi.tanggalText : "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Varietas</p>
+                        <p className="font-semibold">
+                          {jadwalTerbaru?.varietas_padi || "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Jumlah Benih</p>
+                        <p className="font-semibold">
+                          {jadwalTerbaru?.jumlah_benih
+                            ? `${formatNumber(jadwalTerbaru.jumlah_benih)} kg`
+                            : "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-gray-500">Luas Lahan</p>
+                        <p className="font-semibold">{lahan.luas} m²</p>
+                      </div>
+                    </div>
+                  </aside>
+                </div>
+              )}
+
+              {activeTab === "detail" && (
+                <div className="grid grid-cols-1 gap-4 pt-5 md:grid-cols-2">
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Lokasi Lahan</p>
+                    <p className="text-lg font-bold">{lahan.lokasi}</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Status</p>
+                    <p className="text-lg font-bold">{formatStatus(lahan.status)}</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Luas Lahan</p>
+                    <p className="text-lg font-bold">{lahan.luas} m²</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Tanggal Mulai Tanam</p>
+                    <p className="text-lg font-bold">
+                      {formatDateId(jadwalTerbaru?.tanggal_mulai)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Estimasi Panen</p>
+                    <p className="text-lg font-bold">
+                      {panenEstimasi ? panenEstimasi.tanggalText : "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Siap Tanam Kembali</p>
+                    <p className="text-lg font-bold">
+                      {siapTanamKembali ? siapTanamKembali.tanggalText : "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Estimasi Hasil Gabah</p>
+                    <p className="text-lg font-bold">
+                      {estimasiGabahMin && estimasiGabahMax
+                        ? `${formatNumber(estimasiGabahMin)} - ${formatNumber(
+                            estimasiGabahMax
+                          )} kg`
+                        : "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Varietas Padi</p>
+                    <p className="text-lg font-bold">
+                      {jadwalTerbaru?.varietas_padi || "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Jumlah Benih</p>
+                    <p className="text-lg font-bold">
+                      {jadwalTerbaru?.jumlah_benih
+                        ? `${formatNumber(jadwalTerbaru.jumlah_benih)} kg`
+                        : "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-4 md:col-span-2">
+                    <p className="mb-2 text-sm text-gray-500">Catatan</p>
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">
+                      {jadwalTerbaru?.catatan || "Belum ada catatan."}
+                    </p>
+                  </div>
+                </div>
+              )}
             </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold">Siklus Tanam</h2>
-
-                {jadwalTerbaru ? (
-                  <div className="space-y-3 text-sm">
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Hari Ke</p>
-                      <p className="font-semibold">
-                        {hariKe !== null ? `H${hariKe}` : "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Tahap Sekarang</p>
-                      <p className="font-semibold">{tahapSekarang}</p>
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Tanggal Pindah Tanam</p>
-                      <p className="font-semibold">
-                        {formatDateId(jadwalTerbaru.tanggal_mulai)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Estimasi Panen</p>
-                      <p className="font-semibold">
-                        {panenMulai && panenSelesai
-                          ? `${formatDateId(panenMulai)} – ${formatDateId(
-                              panenSelesai
-                            )}`
-                          : "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Siap Tanam Kembali</p>
-                      <p className="font-semibold">
-                        {formatDateId(siapTanamKembali)}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Belum ada siklus tanam untuk lahan ini.
+            <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">Aktivitas Terbaru</h2>
+                  <p className="text-sm text-gray-500">
+                    Log aktivitas terbaru pada lahan ini.
                   </p>
-                )}
+                </div>
+
+                <button
+                  onClick={() => router.push("/log")}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                >
+                  Lihat Semua Log
+                </button>
               </div>
 
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold">Data Tanam</h2>
-
-                {jadwalTerbaru ? (
-                  <div className="space-y-3 text-sm">
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Varietas Padi</p>
-                      <p className="font-semibold">
-                        {jadwalTerbaru.varietas_padi || "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Jumlah Benih</p>
-                      <p className="font-semibold">
-                        {formatNumber(jadwalTerbaru.jumlah_benih)} kg
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-green-100 bg-green-50 p-3">
-                      <p className="text-green-700">Estimasi Hasil Gabah</p>
-                      {estimasiGabahMin &&
-                      estimasiGabahAman &&
-                      estimasiGabahMax ? (
-                        <>
-                          <p className="font-bold text-green-900">
-                            {formatNumber(estimasiGabahMin)} –{" "}
-                            {formatNumber(estimasiGabahMax)} kg
-                          </p>
-                          <p className="text-sm text-green-700">
-                            Patokan aman: ±{formatNumber(estimasiGabahAman)} kg
-                          </p>
-                        </>
-                      ) : (
-                        <p className="font-semibold text-green-900">-</p>
-                      )}
-                    </div>
-
-                    <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-gray-500">Catatan Awal</p>
-                      <p className="font-semibold">
-                        {jadwalTerbaru.catatan || "-"}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Belum ada data tanam.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h2 className="text-lg font-bold">Timeline Siklus Tanam</h2>
-                <p className="text-sm text-gray-500">
-                  Timeline dihitung otomatis dari tanggal pindah tanam / H0.
-                </p>
-              </div>
-
-              {timeline.length === 0 ? (
+              {aktivitasTerbaru.length === 0 ? (
                 <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                  Timeline belum tersedia karena lahan belum memiliki data
-                  mulai tanam.
+                  Belum ada aktivitas yang dicatat.
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {timeline.map((item) => (
-                    <div
-                      key={`${item.range}-${item.label}`}
-                      className="rounded-2xl border bg-gray-50 p-4"
+                  {aktivitasTerbaru.map((log) => (
+                    <article
+                      key={log.id}
+                      onClick={() => router.push(`/log/${log.id}`)}
+                      className="cursor-pointer rounded-2xl border bg-gray-50 p-4 transition hover:border-green-300 hover:bg-green-50"
                     >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="font-semibold">{item.label}</p>
+                          <h3 className="font-bold">{log.jenis_aktivitas}</h3>
                           <p className="text-sm text-gray-500">
-                            {item.tanggal}
+                            {formatDateId(log.tanggal)} • Dicatat{" "}
+                            {formatDateTimeId(log.created_at)}
                           </p>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700">
-                            {item.range}
+                        {log.bukti && (
+                          <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-green-700">
+                            Ada bukti
                           </span>
-
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${getTimelineBadgeStyle(
-                              item.status
-                            )}`}
-                          >
-                            {getTimelineLabel(item.status)}
-                          </span>
-                        </div>
+                        )}
                       </div>
-                    </div>
+
+                      <p className="mt-2 line-clamp-2 text-sm text-gray-700">
+                        {log.deskripsi || "-"}
+                      </p>
+                    </article>
                   ))}
                 </div>
               )}
             </section>
+
+            {isPengelola && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  onClick={openEditModal}
+                  className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
+                >
+                  Edit Jadwal
+                </button>
+
+                <button
+                  onClick={() => router.push(`/log/tambah?lahan_id=${lahanId}`)}
+                  className="rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
+                >
+                  Tambah Log Aktivitas
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {showEditModal && jadwalTerbaru && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-4">
+              <p className="text-sm font-medium text-blue-700">Edit Jadwal</p>
+              <h2 className="text-xl font-bold">Ubah Jadwal Tanam</h2>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              {currentTimelineIndex <= 0 ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Tanggal Mulai Tanam
+                  </label>
+
+                  <input
+                    type="date"
+                    max={editMaxDate}
+                    value={editTanggalMulai}
+                    onChange={(e) => setEditTanggalMulai(e.target.value)}
+                    className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {editableTimelineItems.map((item) => (
+                    <div key={item.key}>
+                      <label className="mb-1 block text-sm font-medium">
+                        Tanggal Akhir {item.label}
+                      </label>
+
+                      <input
+                        type="date"
+                        max={editMaxDate}
+                        value={editTimelineDates[item.key] || ""}
+                        onChange={(e) =>
+                          setEditTimelineDates((prev) => ({
+                            ...prev,
+                            [item.key]: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        Saat ini: {item.tanggalText}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Varietas Padi
+                </label>
+
+                <input
+                  type="text"
+                  value={editVarietasPadi}
+                  onChange={(e) => setEditVarietasPadi(e.target.value)}
+                  className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Jumlah Benih
+                </label>
+
+                <div className="flex overflow-hidden rounded-xl border focus-within:ring-2 focus-within:ring-blue-500">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editJumlahBenih}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (/^[0-9]*[.,]?[0-9]*$/.test(value)) {
+                        setEditJumlahBenih(value)
+                      }
+                    }}
+                    className="w-full px-3 py-2 outline-none"
+                  />
+
+                  <span className="flex items-center border-l bg-gray-50 px-3 text-sm text-gray-500">
+                    kg
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Catatan</label>
+
+                <textarea
+                  value={editCatatan}
+                  onChange={(e) => setEditCatatan(e.target.value)}
+                  className="min-h-24 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="w-full rounded-xl border px-4 py-2 font-medium hover:bg-gray-50 sm:w-1/2"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="w-full rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-60 sm:w-1/2"
+                >
+                  {savingEdit ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

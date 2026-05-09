@@ -1,5 +1,6 @@
 "use client"
 
+import { syncLahanStatus } from "@/lib/syncLahanStatus"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
@@ -107,6 +108,8 @@ export default function LahanPage() {
     const fetchLahan = async () => {
       setLoadingData(true)
 
+      await syncLahanStatus()
+
       const { data, error } = await supabase
         .from("lahan")
         .select(`
@@ -138,11 +141,6 @@ export default function LahanPage() {
     fetchLahan()
   }, [])
 
-  const handleLogout = () => {
-    localStorage.removeItem("riceshare_user")
-    router.push("/")
-  }
-
   if (checkingUser) {
     return (
       <main className="min-h-screen bg-gray-50 p-6 text-gray-900">
@@ -173,13 +171,6 @@ export default function LahanPage() {
               className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
             >
               Dashboard
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              Logout
             </button>
           </div>
         </header>
@@ -276,8 +267,8 @@ export default function LahanPage() {
                     </button>
 
                     <button
-                      disabled
-                      className="w-full cursor-not-allowed rounded-xl border bg-gray-50 px-4 py-2 text-sm font-medium text-gray-400 sm:w-1/2"
+                      onClick={() => router.push(`/log/tambah?lahan_id=${lahan.id}`)}
+                      className="rounded-xl border px-4 py-2 font-medium hover:bg-gray-50"
                     >
                       Log Aktivitas
                     </button>
