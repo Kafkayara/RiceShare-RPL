@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-import { redirect } from "next/navigation"
-
-export default function Home() {
-  redirect("/login")
-=======
 "use client"
 
 import { useState } from "react"
@@ -27,8 +21,8 @@ export default function Home() {
     const { data, error } = await supabase
       .from("users")
       .select("id, nama, email, role")
-      .eq("email", email)
-      .eq("password", password)
+      .eq("email", email.trim().toLowerCase())
+      .eq("password", password.trim())
       .single()
 
     if (error || !data) {
@@ -89,5 +83,4 @@ export default function Home() {
       </div>
     </main>
   )
->>>>>>> 7049ddb (Update app pages)
 }
