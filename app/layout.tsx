@@ -1,6 +1,5 @@
 // @ts-ignore
 import "./globals.css"
-import Link from "next/link"
 
 export default function RootLayout({
   children,
@@ -8,6 +7,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
+<<<<<<< HEAD
     <html lang="en">
       <body style={{ background: "#0f0f0f", color: "white", margin: 0 }}>
         
@@ -26,16 +26,12 @@ export default function RootLayout({
           {children}
         </main>
 
+=======
+    <html lang="id">
+      <body>
+        {children}
+>>>>>>> 7049ddb (Update app pages)
       </body>
     </html>
   )
-}
-
-const navbar = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "15px 30px",
-  borderBottom: "1px solid #333",
-  background: "#111",
 }
