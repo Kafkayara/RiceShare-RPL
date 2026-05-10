@@ -1,6 +1,6 @@
 "use client"
-export const dynamic = "force-dynamic"
 
+import { syncLahanStatus } from "@/lib/syncLahanStatus"
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
@@ -33,7 +33,7 @@ type Lahan = {
   status: string
 }
 
-const allowedPanenStatuses = ["masa_tanam_aktif", "menjelang_panen"]
+const allowedPanenStatuses = ["menjelang_panen"]
 
 function getTodayDateInputValue() {
   const today = new Date()
@@ -78,6 +78,9 @@ export default function PanenPage() {
   const today = getTodayDateInputValue()
 
   const fetchLahan = async () => {
+
+    await syncLahanStatus()
+    
     const { data, error } = await supabase
       .from("lahan")
       .select("id, lokasi, luas, status")
@@ -146,7 +149,6 @@ export default function PanenPage() {
     setErrors({})
     setResult(null)
     setShowResultModal(false)
-
     setFileInputKey((prev) => prev + 1)
   }
 
@@ -220,7 +222,7 @@ export default function PanenPage() {
     const selectedLahan = lahanList.find((lahan) => lahan.id === lahanId)
 
     if (!selectedLahan) {
-      alert("Lahan tidak ditemukan atau tidak siap panen.")
+      alert("Lahan tidak ditemukan atau belum siap panen.")
       return
     }
 
@@ -240,9 +242,7 @@ export default function PanenPage() {
       !allowedPanenStatuses.includes(latestLahan.status)
     ) {
       console.log("LATEST LAHAN ERROR:", latestLahanError)
-      alert(
-        "Lahan ini tidak bisa dipanen karena statusnya bukan masa tanam aktif atau menjelang panen."
-      )
+      alert("Lahan ini belum berstatus siap panen.")
       setLoading(false)
       return
     }
@@ -281,7 +281,7 @@ export default function PanenPage() {
         {
           lahan_id: lahanId,
           berat_gkp: beratNumber,
-          tanggal: tanggal,
+          tanggal,
           catatan: catatan || null,
           bukti_url: buktiUrl,
         },
@@ -301,16 +301,14 @@ export default function PanenPage() {
     const porsiPemilik = totalBeras * 0.5
     const porsiPengelola = totalBeras * 0.5
 
-    const { error: bagiHasilError } = await supabase
-      .from("bagi_hasil")
-      .insert([
-        {
-          panen_id: panenId,
-          total_beras: totalBeras,
-          porsi_pemilik: porsiPemilik,
-          porsi_pengelola: porsiPengelola,
-        },
-      ])
+    const { error: bagiHasilError } = await supabase.from("bagi_hasil").insert([
+      {
+        panen_id: panenId,
+        total_beras: totalBeras,
+        porsi_pemilik: porsiPemilik,
+        porsi_pengelola: porsiPengelola,
+      },
+    ])
 
     if (bagiHasilError) {
       console.log("BAGI HASIL ERROR:", bagiHasilError)
@@ -329,6 +327,46 @@ export default function PanenPage() {
     if (updateLahanError) {
       console.log("UPDATE LAHAN ERROR:", updateLahanError)
       alert("Panen tersimpan, tapi gagal mengubah status lahan.")
+      setLoading(false)
+      return
+    }
+
+    const { data: latestJadwal, error: latestJadwalError } = await supabase
+      .from("jadwal_tanam")
+      .select("id")
+      .eq("lahan_id", lahanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+
+    if (!latestJadwalError && latestJadwal && latestJadwal.length > 0) {
+      const { error: updateJadwalError } = await supabase
+        .from("jadwal_tanam")
+        .update({
+          status: "panen_selesai",
+        })
+        .eq("id", latestJadwal[0].id)
+
+      if (updateJadwalError) {
+        console.log("UPDATE JADWAL TANAM ERROR:", updateJadwalError)
+      }
+    }
+
+    const { error: logPanenError } = await supabase.from("aktivitas_log").insert([
+      {
+        lahan_id: lahanId,
+        pengelola_id: user.id,
+        tanggal,
+        jenis_aktivitas: "Panen Estimasi",
+        deskripsi:
+          catatan ||
+          `Panen dicatat dengan total GKP ${formatKg(beratNumber)} kg.`,
+        bukti: buktiUrl,
+      },
+    ])
+
+    if (logPanenError) {
+      console.log("LOG PANEN ERROR:", logPanenError)
+      alert("Panen tersimpan, tapi gagal mencatat log panen.")
       setLoading(false)
       return
     }
@@ -372,10 +410,26 @@ export default function PanenPage() {
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900">
       <div className="mx-auto w-full max-w-4xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 rounded-2xl border bg-white p-4 shadow-sm">
+        <header className="mb-6 flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-green-700">RiceShare</p>
             <h1 className="text-2xl font-bold">Input Panen</h1>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              onClick={() => router.push("/panen/riwayat")}
+              className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Riwayat Panen
+            </button>
+
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Dashboard
+            </button>
           </div>
         </header>
 
@@ -383,195 +437,193 @@ export default function PanenPage() {
           <section className="mb-6 rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
             <h2 className="font-semibold text-yellow-900">Mode Pemilik</h2>
             <p className="text-sm text-yellow-800">
-              Pemilik hanya bisa melihat hasil monitoring dan laporan. Input
-              panen hanya dapat dilakukan oleh pengelola.
+              Pemilik hanya bisa melihat data panen. Input panen hanya dapat
+              dilakukan oleh pengelola.
             </p>
           </section>
         )}
 
         {isPengelola && (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-
-            {lahanList.length === 0 && (
-              <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-                Belum ada lahan yang bisa dipanen.
+            {lahanList.length === 0 ? (
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                Tidak ada lahan yang sedang berstatus siap panen.
               </div>
-            )}
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Pilih Lahan <span className="text-red-500">*</span>
+                  </label>
 
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Pilih Lahan <span className="text-red-500">*</span>
-                </label>
+                  <div className="relative">
+                    <select
+                      ref={lahanRef}
+                      className={`w-full appearance-none rounded-xl border bg-white px-3 py-2 pr-10 outline-none focus:ring-2 ${
+                        errors.lahanId
+                          ? "border-red-500 bg-red-50 focus:ring-red-500"
+                          : "focus:ring-green-500"
+                      }`}
+                      value={lahanId}
+                      onChange={(e) => {
+                        setLahanId(e.target.value)
+                        setErrors((prev) => ({ ...prev, lahanId: undefined }))
+                      }}
+                    >
+                      <option value="">Pilih lahan</option>
 
-                <div className="relative">
-                  <select
-                    ref={lahanRef}
-                    className={`w-full appearance-none rounded-xl border bg-white px-3 py-2 pr-10 outline-none focus:ring-2 ${
-                      errors.lahanId
+                      {lahanList.map((lahan) => (
+                        <option key={lahan.id} value={lahan.id}>
+                          {lahan.lokasi} - {lahan.luas} m²
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                      ▾
+                    </span>
+                  </div>
+
+                  {errors.lahanId && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.lahanId}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Tanggal Panen <span className="text-red-500">*</span>
+                  </label>
+
+                  <input
+                    ref={tanggalRef}
+                    type="date"
+                    max={today}
+                    className={`w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 ${
+                      errors.tanggal
                         ? "border-red-500 bg-red-50 focus:ring-red-500"
                         : "focus:ring-green-500"
                     }`}
-                    value={lahanId}
-                    onChange={(e) => {
-                      setLahanId(e.target.value)
-                      setErrors((prev) => ({ ...prev, lahanId: undefined }))
-                    }}
-                  >
-                    <option value="">Pilih lahan</option>
-
-                    {lahanList.map((lahan) => (
-                      <option key={lahan.id} value={lahan.id}>
-                        {lahan.lokasi} - {lahan.luas} m²
-                      </option>
-                    ))}
-                  </select>
-
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
-                    ▾
-                  </span>
-                </div>
-
-                {errors.lahanId && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {errors.lahanId}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Tanggal Panen <span className="text-red-500">*</span>
-                </label>
-
-                <input
-                  ref={tanggalRef}
-                  type="date"
-                  max={today}
-                  className={`w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 ${
-                    errors.tanggal
-                      ? "border-red-500 bg-red-50 focus:ring-red-500"
-                      : "focus:ring-green-500"
-                  }`}
-                  value={tanggal}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setTanggal(value)
-
-                    if (value && value > today) {
-                      setErrors((prev) => ({
-                        ...prev,
-                        tanggal:
-                          "Tanggal panen out of range. Tanggal tidak boleh lebih dari hari ini.",
-                      }))
-                    } else {
-                      setErrors((prev) => ({ ...prev, tanggal: undefined }))
-                    }
-                  }}
-                />
-
-                {errors.tanggal && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {errors.tanggal}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Total Gabah / GKP <span className="text-red-500">*</span>
-                </label>
-
-                <div
-                  className={`flex overflow-hidden rounded-xl border focus-within:ring-2 ${
-                    errors.berat
-                      ? "border-red-500 bg-red-50 focus-within:ring-red-500"
-                      : "focus-within:ring-green-500"
-                  }`}
-                >
-                  <input
-                    ref={beratRef}
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="Masukkan berat"
-                    className="w-full bg-transparent px-3 py-2 outline-none"
-                    value={berat}
+                    value={tanggal}
                     onChange={(e) => {
                       const value = e.target.value
+                      setTanggal(value)
 
-                      if (/^[0-9]*[.,]?[0-9]*$/.test(value)) {
-                        setBerat(value)
-                        setErrors((prev) => ({ ...prev, berat: undefined }))
+                      if (value && value > today) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          tanggal:
+                            "Tanggal panen out of range. Tanggal tidak boleh lebih dari hari ini.",
+                        }))
+                      } else {
+                        setErrors((prev) => ({ ...prev, tanggal: undefined }))
                       }
                     }}
                   />
 
-                  <span className="flex items-center border-l bg-gray-50 px-3 text-sm text-gray-500">
-                    kg
-                  </span>
+                  {errors.tanggal && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.tanggal}
+                    </p>
+                  )}
                 </div>
 
-                {errors.berat && (
-                  <p className="mt-1 text-sm text-red-600">{errors.berat}</p>
-                )}
-              </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Total Gabah / GKP <span className="text-red-500">*</span>
+                  </label>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Catatan
-                </label>
+                  <div
+                    className={`flex overflow-hidden rounded-xl border focus-within:ring-2 ${
+                      errors.berat
+                        ? "border-red-500 bg-red-50 focus-within:ring-red-500"
+                        : "focus-within:ring-green-500"
+                    }`}
+                  >
+                    <input
+                      ref={beratRef}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Masukkan berat"
+                      className="w-full bg-transparent px-3 py-2 outline-none"
+                      value={berat}
+                      onChange={(e) => {
+                        const value = e.target.value
 
-                <textarea
-                  placeholder="Masukkan catatan panen"
-                  className="min-h-24 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
-                  value={catatan}
-                  onChange={(e) => setCatatan(e.target.value)}
-                />
-              </div>
+                        if (/^[0-9]*[.,]?[0-9]*$/.test(value)) {
+                          setBerat(value)
+                          setErrors((prev) => ({ ...prev, berat: undefined }))
+                        }
+                      }}
+                    />
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Upload Bukti
-                </label>
+                    <span className="flex items-center border-l bg-gray-50 px-3 text-sm text-gray-500">
+                      kg
+                    </span>
+                  </div>
 
-                <input
-                  key={fileInputKey}
-                  id="bukti-file"
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg"
-                  className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
-                  onChange={handleFileChange}
-                />
+                  {errors.berat && (
+                    <p className="mt-1 text-sm text-red-600">{errors.berat}</p>
+                  )}
+                </div>
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Format: JPG atau PNG. Maksimal 5MB.
-                </p>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Catatan
+                  </label>
 
-                {buktiFile && (
-                  <p className="mt-2 text-xs text-green-700">
-                    File dipilih: {buktiFile.name}
+                  <textarea
+                    placeholder="Masukkan catatan panen"
+                    className="min-h-24 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+                    value={catatan}
+                    onChange={(e) => setCatatan(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Upload Bukti
+                  </label>
+
+                  <input
+                    key={fileInputKey}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                    onChange={handleFileChange}
+                  />
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Format: JPG atau PNG. Maksimal 5MB.
                   </p>
-                )}
-              </div>
 
-              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard")}
-                  className="w-full rounded-xl border px-4 py-2 font-medium hover:bg-gray-50 sm:w-1/2"
-                >
-                  Batal
-                </button>
+                  {buktiFile && (
+                    <p className="mt-2 text-xs text-green-700">
+                      File dipilih: {buktiFile.name}
+                    </p>
+                  )}
+                </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || lahanList.length === 0}
-                  className="w-full rounded-xl bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-60 sm:w-1/2"
-                >
-                  {loading ? "Menyimpan..." : "Simpan"}
-                </button>
-              </div>
-            </form>
+                <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard")}
+                    className="w-full rounded-xl border px-4 py-2 font-medium hover:bg-gray-50 sm:w-1/2"
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-xl bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-60 sm:w-1/2"
+                  >
+                    {loading ? "Menyimpan..." : "Simpan"}
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
         )}
       </div>
@@ -583,9 +635,7 @@ export default function PanenPage() {
               <p className="text-sm font-medium text-green-700">
                 Data berhasil disimpan
               </p>
-              <h2 className="text-xl font-bold">
-                Hasil Panen & Bagi Hasil
-              </h2>
+              <h2 className="text-xl font-bold">Hasil Panen & Bagi Hasil</h2>
             </div>
 
             <div className="space-y-3">

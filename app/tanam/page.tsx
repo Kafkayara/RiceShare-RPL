@@ -27,7 +27,6 @@ type FormErrors = {
 
 type TimelineItem = {
   label: string
-  range: string
   tanggal: string
 }
 
@@ -40,7 +39,6 @@ type ResultData = {
   varietas_padi: string
   jumlah_benih: number
   estimasi_gabah_min: number
-  estimasi_gabah_aman: number
   estimasi_gabah_max: number
   timeline: TimelineItem[]
 }
@@ -83,86 +81,73 @@ function formatNumber(value: number) {
 function buildTimeline(tanggalMulai: string): TimelineItem[] {
   return [
     {
-      label: "Pindah Tanam",
-      range: "H0",
+      label: "Mulai Tanam",
       tanggal: formatDateId(tanggalMulai),
     },
     {
       label: "Cek Adaptasi Bibit",
-      range: "H1–H7",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 1))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 1))} - ${formatDateId(
         addDays(tanggalMulai, 7)
       )}`,
     },
     {
-      label: "Pupuk Awal",
-      range: "H7–H14",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 7))} – ${formatDateId(
+      label: "Pemupukan 1",
+      tanggal: `${formatDateId(addDays(tanggalMulai, 7))} - ${formatDateId(
         addDays(tanggalMulai, 14)
       )}`,
     },
     {
       label: "Pantau Pertumbuhan Awal",
-      range: "H14–H21",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 14))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 14))} - ${formatDateId(
         addDays(tanggalMulai, 21)
       )}`,
     },
     {
       label: "Persiapan Pengendalian Gulma",
-      range: "H21–H30",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 21))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 21))} - ${formatDateId(
         addDays(tanggalMulai, 30)
       )}`,
     },
     {
       label: "Bersihkan Gulma",
-      range: "H30",
       tanggal: formatDateId(addDays(tanggalMulai, 30)),
     },
     {
-      label: "Pupuk Lanjutan",
-      range: "H35–H40",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 35))} – ${formatDateId(
+      label: "Pemupukan 2",
+      tanggal: `${formatDateId(addDays(tanggalMulai, 35))} - ${formatDateId(
         addDays(tanggalMulai, 40)
       )}`,
     },
     {
       label: "Perawatan Lanjutan",
-      range: "H40–H60",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 40))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 40))} - ${formatDateId(
         addDays(tanggalMulai, 60)
       )}`,
     },
     {
-      label: "Pengawasan Generatif",
-      range: "H60",
+      label: "Cek Hama",
       tanggal: formatDateId(addDays(tanggalMulai, 60)),
     },
     {
       label: "Menjelang Panen",
-      range: "H70–H85",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 70))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 70))} - ${formatDateId(
         addDays(tanggalMulai, 85)
       )}`,
     },
     {
-      label: "Periode Panen",
-      range: "H80–H105",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 80))} – ${formatDateId(
+      label: "Panen Estimasi",
+      tanggal: `${formatDateId(addDays(tanggalMulai, 80))} - ${formatDateId(
         addDays(tanggalMulai, 105)
       )}`,
     },
     {
       label: "Masa Istirahat",
-      range: "H106–H119",
-      tanggal: `${formatDateId(addDays(tanggalMulai, 106))} – ${formatDateId(
+      tanggal: `${formatDateId(addDays(tanggalMulai, 106))} - ${formatDateId(
         addDays(tanggalMulai, 119)
       )}`,
     },
     {
       label: "Siap Tanam Kembali",
-      range: "H120+",
       tanggal: `Mulai ${formatDateId(addDays(tanggalMulai, 120))}`,
     },
   ]
@@ -193,6 +178,21 @@ export default function TanamPage() {
 
   const today = getTodayDateInputValue()
 
+  const fetchLahan = async () => {
+    const { data, error } = await supabase
+      .from("lahan")
+      .select("id, lokasi, luas, status")
+      .eq("status", "siap_tanam_kembali")
+      .order("lokasi", { ascending: true })
+
+    if (error) {
+      console.log("FETCH LAHAN ERROR:", error)
+      return
+    }
+
+    setLahanList(data || [])
+  }
+
   useEffect(() => {
     const savedUser = localStorage.getItem("riceshare_user")
 
@@ -206,21 +206,6 @@ export default function TanamPage() {
   }, [router])
 
   useEffect(() => {
-    const fetchLahan = async () => {
-      const { data, error } = await supabase
-        .from("lahan")
-        .select("id, lokasi, luas, status")
-        .in("status", ["belum_digunakan", "siap_tanam_kembali"])
-        .order("lokasi", { ascending: true })
-
-      if (error) {
-        console.log("FETCH LAHAN ERROR:", error)
-        return
-      }
-
-      setLahanList(data || [])
-    }
-
     fetchLahan()
   }, [])
 
@@ -318,7 +303,7 @@ export default function TanamPage() {
     const selectedLahan = lahanList.find((lahan) => lahan.id === lahanId)
 
     if (!selectedLahan) {
-      alert("Lahan tidak ditemukan atau tidak siap tanam.")
+      alert("Lahan tidak ditemukan atau belum siap tanam.")
       return
     }
 
@@ -333,10 +318,10 @@ export default function TanamPage() {
     if (
       latestLahanError ||
       !latestLahan ||
-      !["belum_digunakan", "siap_tanam_kembali"].includes(latestLahan.status)
+      latestLahan.status !== "siap_tanam_kembali"
     ) {
       console.log("LATEST LAHAN ERROR:", latestLahanError)
-      alert("Lahan ini tidak bisa mulai tanam karena statusnya tidak siap.")
+      alert("Lahan ini tidak bisa mulai tanam karena statusnya belum siap tanam.")
       setLoading(false)
       return
     }
@@ -348,7 +333,6 @@ export default function TanamPage() {
     const siapTanamKembali = addDays(tanggalMulai, 120)
 
     const estimasiGabahMin = jumlahBenihNumber * 150
-    const estimasiGabahAman = jumlahBenihNumber * 200
     const estimasiGabahMax = jumlahBenihNumber * 250
 
     const timeline = buildTimeline(tanggalMulai)
@@ -364,6 +348,7 @@ export default function TanamPage() {
           varietas_padi: varietasPadi.trim(),
           jumlah_benih: jumlahBenihNumber,
           catatan: catatan.trim() || null,
+          timeline_overrides: {},
         },
       ])
       .select()
@@ -389,6 +374,24 @@ export default function TanamPage() {
       return
     }
 
+    const { error: logError } = await supabase.from("aktivitas_log").insert([
+      {
+        lahan_id: lahanId,
+        pengelola_id: user.id,
+        tanggal: tanggalMulai,
+        jenis_aktivitas: "Mulai Tanam",
+        deskripsi: catatan.trim() || "Musim tanam dimulai.",
+        bukti: null,
+      },
+    ])
+
+    if (logError) {
+      console.log("LOG MULAI TANAM ERROR:", logError)
+      alert("Jadwal tanam tersimpan, tapi gagal mencatat log mulai tanam.")
+      setLoading(false)
+      return
+    }
+
     setResult({
       lokasi_lahan: selectedLahan.lokasi,
       tanggal_mulai: tanggalMulai,
@@ -398,7 +401,6 @@ export default function TanamPage() {
       varietas_padi: varietasPadi.trim(),
       jumlah_benih: jumlahBenihNumber,
       estimasi_gabah_min: estimasiGabahMin,
-      estimasi_gabah_aman: estimasiGabahAman,
       estimasi_gabah_max: estimasiGabahMax,
       timeline,
     })
@@ -407,8 +409,9 @@ export default function TanamPage() {
     setLoading(false)
   }
 
-  const handleInputAgain = () => {
+  const handleInputAgain = async () => {
     resetForm()
+    await fetchLahan()
   }
 
   const handleExit = () => {
@@ -452,7 +455,6 @@ export default function TanamPage() {
 
         {isPengelola && (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-
             {lahanList.length === 0 && (
               <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
                 Belum ada lahan yang siap tanam.
@@ -631,8 +633,8 @@ export default function TanamPage() {
               </div>
 
               <div className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
-                Sistem akan menghitung estimasi panen H80–H105 dan siap tanam
-                kembali H120+ dari tanggal pindah tanam.
+                Sistem akan menghitung estimasi panen dan siap tanam kembali
+                dari tanggal pindah tanam.
               </div>
 
               <div className="flex flex-col gap-2 pt-2 sm:flex-row">
@@ -683,7 +685,7 @@ export default function TanamPage() {
               <div className="rounded-xl bg-gray-50 p-3">
                 <p className="text-sm text-gray-500">Estimasi Panen</p>
                 <p className="font-bold">
-                  {formatDateId(result.panen_mulai)} –{" "}
+                  {formatDateId(result.panen_mulai)} -{" "}
                   {formatDateId(result.panen_selesai)}
                 </p>
               </div>
@@ -711,11 +713,8 @@ export default function TanamPage() {
             <div className="mt-4 rounded-xl border border-green-100 bg-green-50 p-4">
               <p className="text-sm text-green-700">Estimasi Hasil Gabah</p>
               <p className="text-lg font-bold text-green-900">
-                {formatNumber(result.estimasi_gabah_min)} –{" "}
+                {formatNumber(result.estimasi_gabah_min)} -{" "}
                 {formatNumber(result.estimasi_gabah_max)} kg
-              </p>
-              <p className="text-sm text-green-700">
-                Patokan aman: ±{formatNumber(result.estimasi_gabah_aman)} kg
               </p>
             </div>
 
@@ -725,7 +724,7 @@ export default function TanamPage() {
               <div className="space-y-2">
                 {result.timeline.map((item) => (
                   <div
-                    key={`${item.range}-${item.label}`}
+                    key={item.label}
                     className="rounded-xl border bg-gray-50 p-3"
                   >
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -733,10 +732,6 @@ export default function TanamPage() {
                         <p className="font-semibold">{item.label}</p>
                         <p className="text-sm text-gray-500">{item.tanggal}</p>
                       </div>
-
-                      <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700">
-                        {item.range}
-                      </span>
                     </div>
                   </div>
                 ))}
