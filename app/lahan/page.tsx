@@ -153,6 +153,9 @@ export default function LahanPage() {
     return null
   }
 
+  const isPemilik = user.role === "pemilik"
+  const isPengelola = user.role === "pengelola"
+
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900">
       <div className="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6">
@@ -261,17 +264,21 @@ export default function LahanPage() {
                   <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                     <button
                       onClick={() => router.push(`/lahan/${lahan.id}`)}
-                      className="w-full rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 sm:w-1/2"
+                      className={`rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 ${
+                        isPengelola ? "w-full sm:w-1/2" : "w-full"
+                      }`}
                     >
                       Lihat Detail
                     </button>
 
-                    <button
-                      onClick={() => router.push(`/log/tambah?lahan_id=${lahan.id}`)}
-                      className="rounded-xl border px-4 py-2 font-medium hover:bg-gray-50"
-                    >
-                      Log Aktivitas
-                    </button>
+                    {isPengelola && (
+                      <button
+                        onClick={() => router.push(`/log/tambah?lahan_id=${lahan.id}`)}
+                        className="rounded-xl border px-4 py-2 font-medium hover:bg-gray-50"
+                      >
+                        Log Aktivitas
+                      </button>
+                    )}
                   </div>
                 </article>
               )

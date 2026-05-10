@@ -663,6 +663,20 @@ export default function DashboardPage() {
               Laporan
             </button>
 
+            {isPemilik && (
+              <>
+                <div className="my-3 border-t" />
+
+                <button
+                  onClick={() => router.push("/pengelola")}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left hover:bg-gray-50"
+                >
+                  <span>👥</span>
+                  Kelola Pengelola
+                </button>
+              </>
+            )}
+
             {isPengelola && (
               <>
                 <div className="my-3 border-t" />
@@ -796,224 +810,504 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Jadwal Terdekat</h2>
-                </div>
+            {/* ══════════════════════════════════════════════════════════════
+                LAYOUT PEMILIK — sesuai wireflow screen 3
+            ══════════════════════════════════════════════════════════════ */}
+            {isPemilik && (
+              <>
+                {/* Baris 1: Ringkasan Lahan | Aktivitas Terbaru | Estimasi Panen */}
+                <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
 
-                {notifications.length === 0 ? (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Tidak ada jadwal penting.
-                  </p>
-                ) : (
-                  <div className="divide-y">
-                    {notifications.map((notif) => (
+                  {/* Ringkasan Lahan (tabel status per lahan) */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Ringkasan Lahan</h2>
                       <button
-                        key={notif.id}
-                        onClick={() => router.push(`/lahan/${notif.lahan_id}`)}
-                        className="block w-full py-3 text-left hover:bg-gray-50"
+                        onClick={() => router.push("/lahan")}
+                        className="text-sm font-semibold text-blue-600 hover:underline"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold">{notif.title}</p>
-                            <p className="text-sm text-gray-500">
-                              {notif.message}
-                            </p>
-                          </div>
+                        Lihat Status Lahan →
+                      </button>
+                    </div>
 
-                          <span
-                            className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${getNotificationStyle(
-                              notif.priority
-                            )}`}
+                    {jadwalList.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada data lahan aktif.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {jadwalList.slice(0, 4).map((jadwal) => {
+                          const lokasi = jadwal.lahan?.lokasi || "Lahan"
+                          const status = jadwal.lahan?.status || ""
+                          const overrides = jadwal.timeline_overrides || {}
+
+                          // Hitung progress hari tanam
+                          const hariTanam = differenceInDays(
+                            jadwal.tanggal_mulai,
+                            today
+                          )
+                          const totalHari = 105
+                          const pct = Math.min(
+                            Math.max(
+                              Math.round((hariTanam / totalHari) * 100),
+                              0
+                            ),
+                            100
+                          )
+
+                          const statusColor =
+                            status === "masa_tanam_aktif"
+                              ? "text-green-700"
+                              : status === "menjelang_panen"
+                              ? "text-yellow-700"
+                              : status === "istirahat"
+                              ? "text-gray-500"
+                              : "text-blue-700"
+
+                          return (
+                            <button
+                              key={jadwal.id}
+                              onClick={() =>
+                                router.push(`/lahan/${jadwal.lahan_id}`)
+                              }
+                              className="flex w-full items-center justify-between py-3 text-left hover:bg-gray-50"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-semibold">
+                                  {lokasi}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {formatStatus(status)}
+                                </p>
+                              </div>
+                              <div className="ml-3 flex shrink-0 items-center gap-2">
+                                <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      status === "menjelang_panen"
+                                        ? "bg-yellow-500"
+                                        : status === "istirahat"
+                                        ? "bg-gray-400"
+                                        : "bg-green-500"
+                                    }`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className={`text-xs font-bold ${statusColor}`}>
+                                  {pct}%
+                                </span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Aktivitas Terbaru */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Aktivitas Terbaru</h2>
+                    </div>
+
+                    {aktivitasTerbaru.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada aktivitas tercatat.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {aktivitasTerbaru.map((log) => (
+                          <button
+                            key={log.id}
+                            onClick={() => router.push(`/log/${log.id}`)}
+                            className="block w-full py-3 text-left hover:bg-gray-50"
                           >
-                            {notif.priority === "urgent"
-                              ? "Terlewat"
-                              : notif.priority === "today"
-                              ? "Hari ini"
-                              : "Segera"}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+                            <p className="font-semibold">
+                              {log.lahan?.lokasi || "Lahan"}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {log.jenis_aktivitas} •{" "}
+                              {formatDateId(log.tanggal)}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => router.push("/log")}
+                      className="mt-4 text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Lihat Semua Aktivitas
+                    </button>
                   </div>
-                )}
 
-                <button
-                  onClick={handleOpenNotifications}
-                  className="mt-4 text-sm font-semibold text-blue-600 hover:underline"
-                >
-                  Lihat Semua Jadwal
-                </button>
-              </div>
-
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Aktivitas Terbaru</h2>
-                </div>
-
-                {aktivitasTerbaru.length === 0 ? (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Belum ada aktivitas tercatat.
-                  </p>
-                ) : (
-                  <div className="divide-y">
-                    {aktivitasTerbaru.map((log) => (
+                  {/* Estimasi Panen Terdekat */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Estimasi Panen Terdekat</h2>
                       <button
-                        key={log.id}
-                        onClick={() => router.push(`/log/${log.id}`)}
-                        className="block w-full py-3 text-left hover:bg-gray-50"
+                        onClick={() => router.push("/kalender")}
+                        className="text-sm font-semibold text-blue-600 hover:underline"
                       >
-                        <p className="font-semibold">
-                          {log.jenis_aktivitas} -{" "}
-                          {log.lahan?.lokasi || "Lahan"}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatDateId(log.tanggal)}
-                        </p>
+                        Lihat Kalender
                       </button>
-                    ))}
+                    </div>
+
+                    {lahanMenjelangPanen.length === 0 && jadwalList.filter(j => j.lahan?.status === "masa_tanam_aktif").length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada estimasi panen.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {jadwalList
+                          .filter(
+                            (j) =>
+                              j.lahan?.status === "menjelang_panen" ||
+                              j.lahan?.status === "masa_tanam_aktif"
+                          )
+                          .slice(0, 4)
+                          .map((jadwal) => {
+                            const estimasiPanen = addDays(
+                              jadwal.tanggal_mulai,
+                              80
+                            )
+                            const overrides = jadwal.timeline_overrides || {}
+                            const tanggalPanen =
+                              (overrides["panen_estimasi"] as string) ||
+                              estimasiPanen
+
+                            return (
+                              <button
+                                key={jadwal.id}
+                                onClick={() =>
+                                  router.push(`/lahan/${jadwal.lahan_id}`)
+                                }
+                                className="flex w-full items-center justify-between py-3 text-left hover:bg-gray-50"
+                              >
+                                <p className="font-semibold">
+                                  {jadwal.lahan?.lokasi || "Lahan"}
+                                </p>
+                                <p className="text-sm font-medium text-green-700">
+                                  {formatDateId(tanggalPanen)}
+                                </p>
+                              </button>
+                            )
+                          })}
+                      </div>
+                    )}
                   </div>
-                )}
+                </section>
 
-                <button
-                  onClick={() => router.push("/log")}
-                  className="mt-4 text-sm font-semibold text-blue-600 hover:underline"
-                >
-                  Lihat Semua Aktivitas
-                </button>
-              </div>
+                {/* Baris 2: Notifikasi Penting | Aksi Cepat */}
+                <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
 
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold">Aksi Cepat</h2>
+                  {/* Notifikasi Penting (span 2 kolom) */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Notifikasi Penting</h2>
+                      <button
+                        onClick={handleOpenNotifications}
+                        className="text-sm font-semibold text-blue-600 hover:underline"
+                      >
+                        Lihat Semua Notifikasi
+                      </button>
+                    </div>
 
-                <div className="space-y-3">
-                  {isPengelola && (
-                    <>
+                    {notifications.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Tidak ada notifikasi penting saat ini.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {notifications.map((notif) => (
+                          <li key={notif.id}>
+                            <button
+                              onClick={() =>
+                                router.push(`/lahan/${notif.lahan_id}`)
+                              }
+                              className="flex w-full items-start gap-3 rounded-xl p-3 text-left hover:bg-gray-50"
+                            >
+                              <span
+                                className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                                  notif.priority === "urgent"
+                                    ? "bg-red-500"
+                                    : notif.priority === "today"
+                                    ? "bg-green-500"
+                                    : "bg-yellow-400"
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold leading-snug">
+                                  {notif.title} —{" "}
+                                  <span className="font-normal text-gray-600">
+                                    {notif.message}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {formatDateId(notif.tanggal)}
+                                </p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${getNotificationStyle(
+                                  notif.priority
+                                )}`}
+                              >
+                                {notif.priority === "urgent"
+                                  ? "Terlewat"
+                                  : notif.priority === "today"
+                                  ? "Hari ini"
+                                  : "Segera"}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Aksi Cepat Pemilik */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <h2 className="mb-4 text-lg font-bold">Aksi Cepat</h2>
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => router.push("/lahan")}
+                        className="w-full rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
+                      >
+                        Lihat Status Lahan
+                      </button>
+                      <button
+                        onClick={() => router.push("/laporan")}
+                        className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
+                      >
+                        Lihat Laporan
+                      </button>
+                      <button
+                        onClick={() => router.push("/pengelola")}
+                        className="w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-700 hover:bg-green-100"
+                      >
+                        Kelola Pengelola
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                LAYOUT PENGELOLA — layout asli
+            ══════════════════════════════════════════════════════════════ */}
+            {isPengelola && (
+              <>
+                <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                  {/* Jadwal Terdekat */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Jadwal Terdekat</h2>
+                    </div>
+
+                    {notifications.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Tidak ada jadwal penting.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {notifications.map((notif) => (
+                          <button
+                            key={notif.id}
+                            onClick={() =>
+                              router.push(`/lahan/${notif.lahan_id}`)
+                            }
+                            className="block w-full py-3 text-left hover:bg-gray-50"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-semibold">{notif.title}</p>
+                                <p className="text-sm text-gray-500">
+                                  {notif.message}
+                                </p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${getNotificationStyle(
+                                  notif.priority
+                                )}`}
+                              >
+                                {notif.priority === "urgent"
+                                  ? "Terlewat"
+                                  : notif.priority === "today"
+                                  ? "Hari ini"
+                                  : "Segera"}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleOpenNotifications}
+                      className="mt-4 text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Lihat Semua Jadwal
+                    </button>
+                  </div>
+
+                  {/* Aktivitas Terbaru */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Aktivitas Terbaru</h2>
+                    </div>
+
+                    {aktivitasTerbaru.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada aktivitas tercatat.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {aktivitasTerbaru.map((log) => (
+                          <button
+                            key={log.id}
+                            onClick={() => router.push(`/log/${log.id}`)}
+                            className="block w-full py-3 text-left hover:bg-gray-50"
+                          >
+                            <p className="font-semibold">
+                              {log.jenis_aktivitas} -{" "}
+                              {log.lahan?.lokasi || "Lahan"}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {formatDateId(log.tanggal)}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => router.push("/log")}
+                      className="mt-4 text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Lihat Semua Aktivitas
+                    </button>
+                  </div>
+
+                  {/* Aksi Cepat Pengelola */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <h2 className="mb-4 text-lg font-bold">Aksi Cepat</h2>
+                    <div className="space-y-3">
                       <button
                         onClick={() => router.push("/tanam")}
                         className="w-full rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
                       >
                         Mulai Tanam
                       </button>
-
                       <button
                         onClick={() => router.push("/log/tambah")}
                         className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
                       >
                         Input Log Aktivitas
                       </button>
-
                       <button
                         onClick={() => router.push("/panen")}
                         className="w-full rounded-xl bg-yellow-500 px-4 py-3 font-semibold text-white hover:bg-yellow-600"
                       >
                         Input Panen
                       </button>
-                    </>
-                  )}
+                      <button
+                        onClick={() => router.push("/lahan")}
+                        className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-gray-50"
+                      >
+                        Lihat Status Lahan
+                      </button>
+                    </div>
+                  </div>
+                </section>
 
-                  <button
-                    onClick={() => router.push("/lahan")}
-                    className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-gray-50"
-                  >
-                    Lihat Status Lahan
-                  </button>
-
-                  <button
-                    onClick={() => router.push("/laporan")}
-                    className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-gray-50"
-                  >
-                    Laporan
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Panen Terbaru</h2>
-
-                  <button
-                    onClick={() => router.push("/panen/riwayat")}
-                    className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-                  >
-                    Lihat Semua
-                  </button>
-                </div>
-
-                {panenTerbaru.length === 0 ? (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Belum ada data panen.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {panenTerbaru.map((panen) => (
-                      <article
-                        key={panen.id}
+                <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {/* Panen Terbaru */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Panen Terbaru</h2>
+                      <button
                         onClick={() => router.push("/panen/riwayat")}
-                        className="cursor-pointer rounded-xl border bg-gray-50 p-3 hover:border-green-300 hover:bg-green-50"
+                        className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
                       >
-                        <h3 className="font-bold">
-                          {panen.lahan?.lokasi || "Lahan tidak diketahui"}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {formatDateId(panen.tanggal)} •{" "}
-                          {formatKg(panen.berat_gkp)} kg GKP
-                        </p>
-                      </article>
-                    ))}
+                        Lihat Semua
+                      </button>
+                    </div>
+
+                    {panenTerbaru.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada data panen.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {panenTerbaru.map((panen) => (
+                          <article
+                            key={panen.id}
+                            onClick={() => router.push("/panen/riwayat")}
+                            className="cursor-pointer rounded-xl border bg-gray-50 p-3 hover:border-green-300 hover:bg-green-50"
+                          >
+                            <h3 className="font-bold">
+                              {panen.lahan?.lokasi || "Lahan tidak diketahui"}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              {formatDateId(panen.tanggal)} •{" "}
+                              {formatKg(panen.berat_gkp)} kg GKP
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-bold">Lahan Menjelang Panen</h2>
+                  {/* Lahan Menjelang Panen */}
+                  <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-bold">Lahan Menjelang Panen</h2>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => router.push("/kalender")}
+                          className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                        >
+                          Kalender
+                        </button>
+                        <button
+                          onClick={() => router.push("/lahan")}
+                          className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                        >
+                          Lihat Lahan
+                        </button>
+                      </div>
+                    </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => router.push("/kalender")}
-                      className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-                    >
-                      Kalender
-                    </button>
-
-                    <button
-                      onClick={() => router.push("/lahan")}
-                      className="rounded-xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-                    >
-                      Lihat Lahan
-                    </button>
+                    {lahanMenjelangPanen.length === 0 ? (
+                      <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+                        Belum ada lahan menjelang panen.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {lahanMenjelangPanen.map((lahan) => (
+                          <article
+                            key={lahan.id}
+                            onClick={() => router.push(`/lahan/${lahan.id}`)}
+                            className="cursor-pointer rounded-xl border bg-gray-50 p-3 hover:border-green-300 hover:bg-green-50"
+                          >
+                            <span className="mb-2 inline-block rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-medium text-yellow-700">
+                              {formatStatus(lahan.status)}
+                            </span>
+                            <h3 className="font-bold">{lahan.lokasi}</h3>
+                            <p className="text-sm text-gray-600">
+                              {lahan.luas} m²
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
+                </section>
+              </>
+            )}
 
-                {lahanMenjelangPanen.length === 0 ? (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Belum ada lahan menjelang panen.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {lahanMenjelangPanen.map((lahan) => (
-                      <article
-                        key={lahan.id}
-                        onClick={() => router.push(`/lahan/${lahan.id}`)}
-                        className="cursor-pointer rounded-xl border bg-gray-50 p-3 hover:border-green-300 hover:bg-green-50"
-                      >
-                        <span className="mb-2 inline-block rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-medium text-yellow-700">
-                          {formatStatus(lahan.status)}
-                        </span>
-                        <h3 className="font-bold">{lahan.lokasi}</h3>
-                        <p className="text-sm text-gray-600">
-                          {lahan.luas} m²
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
         </div>
       </div>

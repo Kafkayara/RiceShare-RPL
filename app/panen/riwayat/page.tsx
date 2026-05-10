@@ -139,14 +139,10 @@ export default function RiwayatPanenPage() {
   const fetchData = async () => {
     setLoadingData(true)
 
-    const { data: lahanData, error: lahanError } = await supabase
+    const { data: lahanData } = await supabase
       .from("lahan")
       .select("id, lokasi, luas, status")
       .order("lokasi", { ascending: true })
-
-    if (lahanError) {
-      console.log("FETCH LAHAN RIWAYAT PANEN ERROR:", lahanError)
-    }
 
     const { data: panenData, error: panenError } = await supabase
       .from("panen")
@@ -194,7 +190,8 @@ export default function RiwayatPanenPage() {
   const filteredPanen = useMemo(() => {
     return panenList.filter((panen) => {
       const matchLahan =
-        selectedLahanId === "semua" || panen.lahan_id === selectedLahanId
+        selectedLahanId === "semua" ||
+        panen.lahan_id === selectedLahanId
 
       const matchTanggalMulai =
         !tanggalMulai || panen.tanggal >= tanggalMulai
@@ -206,8 +203,12 @@ export default function RiwayatPanenPage() {
 
       const matchKeyword =
         !keyword ||
-        (panen.lahan?.lokasi || "").toLowerCase().includes(keyword) ||
-        (panen.catatan || "").toLowerCase().includes(keyword)
+        (panen.lahan?.lokasi || "")
+          .toLowerCase()
+          .includes(keyword) ||
+        (panen.catatan || "")
+          .toLowerCase()
+          .includes(keyword)
 
       return (
         matchLahan &&
@@ -232,8 +233,12 @@ export default function RiwayatPanenPage() {
         acc.totalPanen += 1
         acc.totalGkp += Number(panen.berat_gkp || 0)
         acc.totalBeras += Number(bagiHasil?.total_beras || 0)
-        acc.totalPemilik += Number(bagiHasil?.porsi_pemilik || 0)
-        acc.totalPengelola += Number(bagiHasil?.porsi_pengelola || 0)
+        acc.totalPemilik += Number(
+          bagiHasil?.porsi_pemilik || 0
+        )
+        acc.totalPengelola += Number(
+          bagiHasil?.porsi_pengelola || 0
+        )
 
         return acc
       },
@@ -256,7 +261,7 @@ export default function RiwayatPanenPage() {
 
   if (checkingUser) {
     return (
-      <main className="min-h-screen bg-gray-50 p-6 text-gray-900">
+      <main className="min-h-screen bg-gray-50 p-6">
         Loading...
       </main>
     )
@@ -264,27 +269,56 @@ export default function RiwayatPanenPage() {
 
   if (!user) return null
 
+  const isPemilik = user.role === "pemilik"
   const isPengelola = user.role === "pengelola"
 
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+
+      <div className="mx-auto w-full max-w-6xl px-4 py-6">
+
+        {/* HEADER */}
+        <header className="mb-6 flex flex-col gap-4 rounded-2xl border bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+
           <div>
-            <p className="text-sm font-medium text-green-700">RiceShare</p>
-            <h1 className="text-2xl font-bold">Riwayat Panen</h1>
-            <p className="text-sm text-gray-500">
-              Pantau seluruh hasil panen, estimasi beras, dan pembagian hasil.
+
+            <p className="text-sm font-medium text-green-700">
+              RiceShare
+            </p>
+
+            <div className="mt-1 flex items-center gap-3">
+
+              <h1 className="text-3xl font-bold">
+                🌾 Riwayat Panen
+              </h1>
+
+              {isPemilik && (
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                  👨‍🌾 Pemilik
+                </span>
+              )}
+
+              {isPengelola && (
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                  🧑‍🌾 Pengelola
+                </span>
+              )}
+
+            </div>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Pantau seluruh hasil panen dan pembagian hasil.
             </p>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-wrap gap-2">
+
             {isPengelola && (
               <button
                 onClick={() => router.push("/panen")}
                 className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
               >
-                Input Panen
+                + Input Panen
               </button>
             )}
 
@@ -301,114 +335,151 @@ export default function RiwayatPanenPage() {
             >
               Dashboard
             </button>
+
           </div>
         </header>
 
+        {/* MODE INFO */}
+        <section className="mb-6">
+
+          {isPemilik && (
+            <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+              <p className="font-semibold text-green-700">
+                👨‍🌾 Mode Pemilik
+              </p>
+
+              <p className="mt-1 text-sm text-green-600">
+                Pemilik hanya dapat memonitor hasil panen dan pembagian hasil.
+              </p>
+            </div>
+          )}
+
+          {isPengelola && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <p className="font-semibold text-blue-700">
+                🧑‍🌾 Mode Pengelola
+              </p>
+
+              <p className="mt-1 text-sm text-blue-600">
+                Pengelola dapat melakukan input dan pengelolaan panen.
+              </p>
+            </div>
+          )}
+
+        </section>
+
+        {/* SUMMARY */}
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-5">
+
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-sm text-gray-500">Total Panen</p>
-            <h2 className="mt-2 text-2xl font-bold">{summary.totalPanen}</h2>
+            <p className="text-sm text-gray-500">
+              Total Panen
+            </p>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              {summary.totalPanen}
+            </h2>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-sm text-gray-500">Total GKP</p>
+            <p className="text-sm text-gray-500">
+              Total GKP
+            </p>
+
             <h2 className="mt-2 text-2xl font-bold">
               {formatKg(summary.totalGkp)} kg
             </h2>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-sm text-gray-500">Estimasi Beras</p>
+            <p className="text-sm text-gray-500">
+              Estimasi Beras
+            </p>
+
             <h2 className="mt-2 text-2xl font-bold">
               {formatKg(summary.totalBeras)} kg
             </h2>
           </div>
 
           <div className="rounded-2xl border bg-blue-50 p-4 shadow-sm">
-            <p className="text-sm text-blue-700">Bagian Pemilik</p>
+            <p className="text-sm text-blue-700">
+              Bagian Pemilik
+            </p>
+
             <h2 className="mt-2 text-2xl font-bold text-blue-800">
               {formatKg(summary.totalPemilik)} kg
             </h2>
           </div>
 
           <div className="rounded-2xl border bg-yellow-50 p-4 shadow-sm">
-            <p className="text-sm text-yellow-700">Bagian Pengelola</p>
+            <p className="text-sm text-yellow-700">
+              Bagian Pengelola
+            </p>
+
             <h2 className="mt-2 text-2xl font-bold text-yellow-800">
               {formatKg(summary.totalPengelola)} kg
             </h2>
           </div>
+
         </section>
 
-        <section className="mb-6 rounded-2xl border bg-white p-4 shadow-sm">
+        {/* FILTER */}
+        <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm">
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Cari Riwayat
-              </label>
 
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Cari lahan atau catatan"
-                className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) =>
+                setSearchKeyword(e.target.value)
+              }
+              placeholder="Cari lahan atau catatan"
+              className="rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Filter Lahan
-              </label>
+            <select
+              value={selectedLahanId}
+              onChange={(e) =>
+                setSelectedLahanId(e.target.value)
+              }
+              className="rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="semua">
+                Semua lahan
+              </option>
 
-              <div className="relative">
-                <select
-                  value={selectedLahanId}
-                  onChange={(e) => setSelectedLahanId(e.target.value)}
-                  className="w-full appearance-none rounded-xl border bg-white px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-green-500"
+              {lahanList.map((lahan) => (
+                <option
+                  key={lahan.id}
+                  value={lahan.id}
                 >
-                  <option value="semua">Semua lahan</option>
+                  {lahan.lokasi} - {lahan.luas} m²
+                </option>
+              ))}
+            </select>
 
-                  {lahanList.map((lahan) => (
-                    <option key={lahan.id} value={lahan.id}>
-                      {lahan.lokasi} - {lahan.luas} m²
-                    </option>
-                  ))}
-                </select>
+            <input
+              type="date"
+              value={tanggalMulai}
+              onChange={(e) =>
+                setTanggalMulai(e.target.value)
+              }
+              className="rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+            />
 
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
-                  ▾
-                </span>
-              </div>
-            </div>
+            <input
+              type="date"
+              value={tanggalAkhir}
+              onChange={(e) =>
+                setTanggalAkhir(e.target.value)
+              }
+              className="rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Tanggal Mulai
-              </label>
-
-              <input
-                type="date"
-                value={tanggalMulai}
-                onChange={(e) => setTanggalMulai(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Tanggal Akhir
-              </label>
-
-              <input
-                type="date"
-                value={tanggalAkhir}
-                onChange={(e) => setTanggalAkhir(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <div className="mt-4 flex justify-end">
             <button
               onClick={resetFilter}
               className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
@@ -416,20 +487,26 @@ export default function RiwayatPanenPage() {
               Reset Filter
             </button>
           </div>
+
         </section>
 
+        {/* LIST */}
         {loadingData ? (
+
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">Memuat riwayat panen...</p>
+            Loading...
           </section>
+
         ) : filteredPanen.length === 0 ? (
+
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Tidak ada riwayat panen yang sesuai filter.
-            </p>
+            Tidak ada riwayat panen.
           </section>
+
         ) : (
+
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             {filteredPanen.map((panen) => {
               const bagiHasil = getBagiHasil(panen)
 
@@ -438,211 +515,221 @@ export default function RiwayatPanenPage() {
                   key={panen.id}
                   className="rounded-2xl border bg-white p-5 shadow-sm"
                 >
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+
+                  <div className="mb-4 flex items-start justify-between">
+
                     <div>
                       <h2 className="text-xl font-bold">
-                        {panen.lahan?.lokasi || "Lahan tidak diketahui"}
+                        {panen.lahan?.lokasi}
                       </h2>
 
                       <p className="text-sm text-gray-500">
-                        Panen pada {formatDateId(panen.tanggal)}
+                        {formatDateId(panen.tanggal)}
                       </p>
                     </div>
 
                     <span
-                      className={`w-fit rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(
+                      className={`rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(
                         panen.lahan?.status
                       )}`}
                     >
-                      {formatStatus(panen.lahan?.status)}
+                      {formatStatus(
+                        panen.lahan?.status
+                      )}
                     </span>
+
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-3">
+
                     <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-sm text-gray-500">Total GKP</p>
+                      <p className="text-sm text-gray-500">
+                        Total GKP
+                      </p>
+
                       <p className="font-bold">
-                        {formatKg(panen.berat_gkp)} kg
+                        {formatKg(
+                          panen.berat_gkp
+                        )} kg
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-gray-50 p-3">
-                      <p className="text-sm text-gray-500">Estimasi Beras</p>
+                      <p className="text-sm text-gray-500">
+                        Estimasi Beras
+                      </p>
+
                       <p className="font-bold">
-                        {formatKg(bagiHasil?.total_beras)} kg
+                        {formatKg(
+                          bagiHasil?.total_beras
+                        )} kg
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-blue-50 p-3">
-                      <p className="text-sm text-blue-700">Bagian Pemilik</p>
+                      <p className="text-sm text-blue-700">
+                        Pemilik
+                      </p>
+
                       <p className="font-bold text-blue-800">
-                        {formatKg(bagiHasil?.porsi_pemilik)} kg
+                        {formatKg(
+                          bagiHasil?.porsi_pemilik
+                        )} kg
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-yellow-50 p-3">
                       <p className="text-sm text-yellow-700">
-                        Bagian Pengelola
+                        Pengelola
                       </p>
+
                       <p className="font-bold text-yellow-800">
-                        {formatKg(bagiHasil?.porsi_pengelola)} kg
+                        {formatKg(
+                          bagiHasil?.porsi_pengelola
+                        )} kg
                       </p>
                     </div>
+
                   </div>
 
-                  <p className="mt-3 line-clamp-2 text-sm text-gray-600">
-                    {panen.catatan || "Tidak ada catatan."}
+                  <p className="mt-4 text-sm text-gray-600">
+                    {panen.catatan ||
+                      "Tidak ada catatan."}
                   </p>
 
                   <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+
                     <button
-                      onClick={() => setSelectedPanen(panen)}
+                      onClick={() =>
+                        setSelectedPanen(panen)
+                      }
                       className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
                     >
                       Detail
                     </button>
 
                     <button
-                      onClick={() => router.push(`/lahan/${panen.lahan_id}`)}
+                      onClick={() =>
+                        router.push(
+                          `/lahan/${panen.lahan_id}`
+                        )
+                      }
                       className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
                     >
                       Detail Lahan
                     </button>
 
                     <button
-                      onClick={() => router.push("/laporan")}
+                      onClick={() =>
+                        router.push("/laporan")
+                      }
                       className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
                     >
                       Buka Laporan
                     </button>
+
                   </div>
+
                 </article>
               )
             })}
+
           </section>
         )}
+
       </div>
 
+      {/* MODAL DETAIL */}
       {selectedPanen && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+
           <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+
+            <div className="mb-4 flex items-start justify-between">
+
               <div>
+
                 <p className="text-sm font-medium text-green-700">
                   Detail Panen
                 </p>
 
                 <h2 className="text-xl font-bold">
-                  {selectedPanen.lahan?.lokasi || "Lahan tidak diketahui"}
+                  {selectedPanen.lahan?.lokasi}
                 </h2>
 
                 <p className="text-sm text-gray-500">
-                  {formatDateId(selectedPanen.tanggal)} • Dicatat{" "}
-                  {formatDateTimeId(selectedPanen.created_at)}
+                  {formatDateId(selectedPanen.tanggal)}
                 </p>
+
               </div>
 
               <button
-                onClick={() => setSelectedPanen(null)}
+                onClick={() =>
+                  setSelectedPanen(null)
+                }
                 className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
               >
                 Tutup
               </button>
+
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
               <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Lahan</p>
+                <p className="text-sm text-gray-500">
+                  Total GKP
+                </p>
+
                 <p className="font-bold">
-                  {selectedPanen.lahan?.lokasi || "-"}
+                  {formatKg(
+                    selectedPanen.berat_gkp
+                  )} kg
                 </p>
               </div>
 
               <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Luas Lahan</p>
-                <p className="font-bold">
-                  {selectedPanen.lahan?.luas || "-"} m²
+                <p className="text-sm text-gray-500">
+                  Estimasi Beras
                 </p>
-              </div>
 
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Tanggal Panen</p>
-                <p className="font-bold">{formatDateId(selectedPanen.tanggal)}</p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Total GKP</p>
                 <p className="font-bold">
-                  {formatKg(selectedPanen.berat_gkp)} kg
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Estimasi Beras</p>
-                <p className="font-bold">
-                  {formatKg(getBagiHasil(selectedPanen)?.total_beras)} kg
+                  {formatKg(
+                    getBagiHasil(selectedPanen)
+                      ?.total_beras
+                  )} kg
                 </p>
               </div>
 
               <div className="rounded-xl bg-blue-50 p-4">
-                <p className="text-sm text-blue-700">Bagian Pemilik</p>
+                <p className="text-sm text-blue-700">
+                  Bagian Pemilik
+                </p>
+
                 <p className="font-bold text-blue-800">
-                  {formatKg(getBagiHasil(selectedPanen)?.porsi_pemilik)} kg
+                  {formatKg(
+                    getBagiHasil(selectedPanen)
+                      ?.porsi_pemilik
+                  )} kg
                 </p>
               </div>
 
               <div className="rounded-xl bg-yellow-50 p-4">
-                <p className="text-sm text-yellow-700">Bagian Pengelola</p>
+                <p className="text-sm text-yellow-700">
+                  Bagian Pengelola
+                </p>
+
                 <p className="font-bold text-yellow-800">
-                  {formatKg(getBagiHasil(selectedPanen)?.porsi_pengelola)} kg
+                  {formatKg(
+                    getBagiHasil(selectedPanen)
+                      ?.porsi_pengelola
+                  )} kg
                 </p>
               </div>
 
-              <div className="rounded-xl bg-gray-50 p-4 md:col-span-2">
-                <p className="mb-2 text-sm text-gray-500">Catatan</p>
-                <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">
-                  {selectedPanen.catatan || "Tidak ada catatan."}
-                </p>
-              </div>
             </div>
 
-            {selectedPanen.bukti_url && (
-              <div className="mt-5">
-                <h3 className="mb-2 font-bold">Bukti Panen</h3>
-
-                <div className="rounded-xl border bg-gray-50 p-3">
-                  <img
-                    src={selectedPanen.bukti_url}
-                    alt="Bukti panen"
-                    className="max-h-[420px] w-full rounded-xl object-contain"
-                  />
-                </div>
-
-                <a
-                  href={selectedPanen.bukti_url}
-                  target="_blank"
-                  className="mt-3 inline-block text-sm font-medium text-green-700 hover:underline"
-                >
-                  Buka bukti di tab baru
-                </a>
-              </div>
-            )}
-
-            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                onClick={() => router.push(`/lahan/${selectedPanen.lahan_id}`)}
-                className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
-              >
-                Buka Detail Lahan
-              </button>
-
-              <button
-                onClick={() => router.push("/laporan")}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
-              >
-                Buka Laporan
-              </button>
-            </div>
           </div>
         </div>
       )}
