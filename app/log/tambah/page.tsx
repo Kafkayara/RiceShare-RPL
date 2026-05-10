@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 
@@ -73,24 +73,20 @@ function getTodayDateInputValue() {
   const year = today.getFullYear()
   const month = String(today.getMonth() + 1).padStart(2, "0")
   const day = String(today.getDate()).padStart(2, "0")
-
   return `${year}-${month}-${day}`
 }
 
 function addDays(dateString: string, days: number) {
   const date = new Date(dateString)
   date.setDate(date.getDate() + days)
-
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
-
   return `${year}-${month}-${day}`
 }
 
 function formatDateId(dateString?: string | null) {
   if (!dateString) return "-"
-
   return new Date(dateString).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "long",
@@ -124,14 +120,12 @@ function buildTimeline(
       const previousEndOffset = previousTemplate?.endOffset || 0
       const gapFromPrevious = template.startOffset - previousEndOffset
       const duration = template.endOffset - template.startOffset
-
       startDate = addDays(previousItem.endDate, gapFromPrevious)
       endDate = addDays(startDate, duration)
     }
 
     if (overrides[template.key]) {
       endDate = overrides[template.key]
-
       if (template.startOffset === template.endOffset) {
         startDate = endDate
       }
@@ -153,7 +147,8 @@ function isDateInRange(date: string, startDate: string, endDate: string) {
   return date >= startDate && date <= endDate
 }
 
-export default function TambahLogAktivitasPage() {
+// ─── Komponen utama dipisah agar useSearchParams bisa dibungkus Suspense ───
+function TambahLogAktivitasContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -184,7 +179,6 @@ export default function TambahLogAktivitasPage() {
 
   const timeline = useMemo(() => {
     if (!jadwalTanam?.tanggal_mulai) return []
-
     return buildTimeline(
       jadwalTanam.tanggal_mulai,
       jadwalTanam.timeline_overrides || {}
@@ -193,14 +187,8 @@ export default function TambahLogAktivitasPage() {
 
   const availableActivities = useMemo(() => {
     if (!tanggal) return []
-
     return timeline.filter((item) => {
-      const sedangBerjalan = isDateInRange(
-        tanggal,
-        item.startDate,
-        item.endDate
-      )
-
+      const sedangBerjalan = isDateInRange(tanggal, item.startDate, item.endDate)
       const sudahAdaLog = aktivitasLogs.some((log) => {
         return (
           log.jenis_aktivitas === item.label &&
@@ -209,7 +197,6 @@ export default function TambahLogAktivitasPage() {
           log.tanggal <= item.endDate
         )
       })
-
       return sedangBerjalan && !sudahAdaLog
     })
   }, [timeline, tanggal, aktivitasLogs])
@@ -220,12 +207,10 @@ export default function TambahLogAktivitasPage() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem("riceshare_user")
-
     if (!savedUser) {
       router.push("/")
       return
     }
-
     setUser(JSON.parse(savedUser))
     setCheckingUser(false)
   }, [router])
@@ -236,15 +221,12 @@ export default function TambahLogAktivitasPage() {
         .from("lahan")
         .select("id, lokasi, luas, status")
         .order("lokasi", { ascending: true })
-
       if (error) {
         console.log("FETCH LAHAN ERROR:", error)
         return
       }
-
       setLahanList(data || [])
     }
-
     fetchLahan()
   }, [])
 
@@ -309,7 +291,6 @@ export default function TambahLogAktivitasPage() {
       if (lahanList.length === 0) return
 
       const isValidLahan = lahanList.some((lahan) => lahan.id === lahanIdFromUrl)
-
       if (!isValidLahan) {
         setAutoSelectedFromUrl(true)
         return
@@ -325,30 +306,21 @@ export default function TambahLogAktivitasPage() {
 
       setJenisAktivitas("")
       setAutoSelectedFromUrl(true)
-
       await fetchSelectedLahanData(lahanIdFromUrl)
     }
 
     applyFromUrl()
-  }, [
-    lahanIdFromUrl,
-    tanggalFromUrl,
-    lahanList,
-    autoSelectedFromUrl,
-    today,
-  ])
+  }, [lahanIdFromUrl, tanggalFromUrl, lahanList, autoSelectedFromUrl, today])
 
   const handleLahanChange = async (value: string) => {
     setLahanId(value)
     setTanggal("")
     setJenisAktivitas("")
-
     if (!value) {
       setJadwalTanam(null)
       setAktivitasLogs([])
       return
     }
-
     await fetchSelectedLahanData(value)
   }
 
@@ -359,30 +331,24 @@ export default function TambahLogAktivitasPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-
     if (!file) {
       setBuktiFile(null)
       return
     }
-
     const allowedTypes = ["image/png", "image/jpeg", "image/jpg"]
-
     if (!allowedTypes.includes(file.type)) {
       alert("File bukti harus berupa PNG atau JPG.")
       e.target.value = ""
       setBuktiFile(null)
       return
     }
-
     const maxSize = 5 * 1024 * 1024
-
     if (file.size > maxSize) {
       alert("Ukuran file maksimal 5MB.")
       e.target.value = ""
       setBuktiFile(null)
       return
     }
-
     setBuktiFile(file)
   }
 
@@ -404,37 +370,30 @@ export default function TambahLogAktivitasPage() {
       alert("Hanya pengelola yang boleh input log aktivitas.")
       return
     }
-
     if (!lahanId) {
       alert("Lahan wajib dipilih.")
       return
     }
-
     if (!tanggal) {
       alert("Tanggal aktivitas wajib diisi.")
       return
     }
-
     if (tanggal > today) {
       alert("Tanggal aktivitas tidak boleh lebih dari hari ini.")
       return
     }
-
     if (!jadwalTanam) {
       alert("Lahan ini belum memiliki jadwal tanam aktif.")
       return
     }
-
     if (availableActivities.length === 0) {
       alert("Tidak ada aktivitas terjadwal yang bisa dicatat pada tanggal ini.")
       return
     }
-
     if (!jenisAktivitas) {
       alert("Jenis aktivitas wajib dipilih.")
       return
     }
-
     if (!deskripsi.trim()) {
       alert("Deskripsi aktivitas wajib diisi.")
       return
@@ -446,10 +405,7 @@ export default function TambahLogAktivitasPage() {
 
     if (buktiFile) {
       const fileExt = buktiFile.name.split(".").pop()
-      const fileName = `${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2)}.${fileExt}`
-
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
       const filePath = `aktivitas/${fileName}`
 
       const { error: uploadError } = await supabase.storage
@@ -494,14 +450,12 @@ export default function TambahLogAktivitasPage() {
 
   const handleInputAgain = async () => {
     const lastLahanId = lahanId
-
     setTanggal("")
     setJenisAktivitas("")
     setDeskripsi("")
     setBuktiFile(null)
     setFileInputKey((prev) => prev + 1)
     setShowSuccessModal(false)
-
     if (lastLahanId) {
       await fetchSelectedLahanData(lastLahanId)
     }
@@ -533,7 +487,6 @@ export default function TambahLogAktivitasPage() {
             <p className="text-sm font-medium text-green-700">RiceShare</p>
             <h1 className="text-2xl font-bold">Tambah Log Aktivitas</h1>
           </div>
-
           <button
             onClick={() => router.push("/log")}
             className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
@@ -548,7 +501,6 @@ export default function TambahLogAktivitasPage() {
             <p className="text-sm text-yellow-800">
               Pemilik hanya dapat melihat log aktivitas. Input log hanya tersedia untuk pengelola.
             </p>
-
             <button
               onClick={() => router.push("/log")}
               className="mt-4 rounded-xl border border-yellow-300 px-4 py-2 text-sm font-medium hover:bg-yellow-100"
@@ -563,7 +515,6 @@ export default function TambahLogAktivitasPage() {
                 <label className="mb-1 block text-sm font-medium">
                   Pilih Lahan <span className="text-red-500">*</span>
                 </label>
-
                 <div className="relative">
                   <select
                     className="w-full appearance-none rounded-xl border bg-white px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-green-500"
@@ -571,25 +522,21 @@ export default function TambahLogAktivitasPage() {
                     onChange={(e) => handleLahanChange(e.target.value)}
                   >
                     <option value="">Pilih lahan</option>
-
                     {lahanList.map((lahan) => (
                       <option key={lahan.id} value={lahan.id}>
                         {lahan.lokasi} - {lahan.luas} m²
                       </option>
                     ))}
                   </select>
-
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
                     ▾
                   </span>
                 </div>
-
                 {selectedLahan && lahanIdFromUrl && (
                   <p className="mt-2 text-xs text-green-700">
                     Lahan otomatis dipilih dari halaman sebelumnya.
                   </p>
                 )}
-
                 {tanggalFromUrl && tanggal && (
                   <p className="mt-1 text-xs text-green-700">
                     Tanggal otomatis dipilih dari kalender.
@@ -615,7 +562,6 @@ export default function TambahLogAktivitasPage() {
                     <label className="mb-1 block text-sm font-medium">
                       Tanggal Aktivitas <span className="text-red-500">*</span>
                     </label>
-
                     <input
                       type="date"
                       max={today}
@@ -629,7 +575,6 @@ export default function TambahLogAktivitasPage() {
                     <label className="mb-1 block text-sm font-medium">
                       Jenis Aktivitas <span className="text-red-500">*</span>
                     </label>
-
                     {!tanggal ? (
                       <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
                         Pilih tanggal aktivitas terlebih dahulu.
@@ -654,14 +599,12 @@ export default function TambahLogAktivitasPage() {
                           onChange={(e) => setJenisAktivitas(e.target.value)}
                         >
                           <option value="">Pilih aktivitas</option>
-
                           {availableActivities.map((item) => (
                             <option key={item.key} value={item.label}>
                               {item.label}
                             </option>
                           ))}
                         </select>
-
                         <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
                           ▾
                         </span>
@@ -673,7 +616,6 @@ export default function TambahLogAktivitasPage() {
                     <label className="mb-1 block text-sm font-medium">
                       Deskripsi <span className="text-red-500">*</span>
                     </label>
-
                     <textarea
                       placeholder="Masukkan catatan aktivitas"
                       className="min-h-24 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
@@ -686,7 +628,6 @@ export default function TambahLogAktivitasPage() {
                     <label className="mb-1 block text-sm font-medium">
                       Upload Bukti
                     </label>
-
                     <input
                       key={fileInputKey}
                       type="file"
@@ -694,11 +635,9 @@ export default function TambahLogAktivitasPage() {
                       className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
                       onChange={handleFileChange}
                     />
-
                     <p className="mt-1 text-xs text-gray-500">
                       Format: JPG atau PNG. Maksimal 5MB.
                     </p>
-
                     {buktiFile && (
                       <p className="mt-2 text-xs text-green-700">
                         File dipilih: {buktiFile.name}
@@ -716,7 +655,6 @@ export default function TambahLogAktivitasPage() {
                 >
                   Batal
                 </button>
-
                 <button
                   type="submit"
                   disabled={
@@ -742,11 +680,9 @@ export default function TambahLogAktivitasPage() {
               Data berhasil disimpan
             </p>
             <h2 className="text-xl font-bold">Log Aktivitas Tercatat</h2>
-
             <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
               Aktivitas berhasil dicatat dan dapat dilihat pada halaman riwayat aktivitas.
             </p>
-
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <button
                 onClick={handleExit}
@@ -754,7 +690,6 @@ export default function TambahLogAktivitasPage() {
               >
                 Lihat Riwayat
               </button>
-
               <button
                 onClick={handleInputAgain}
                 className="w-full rounded-xl bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 sm:w-1/2"
@@ -766,5 +701,20 @@ export default function TambahLogAktivitasPage() {
         </div>
       )}
     </main>
+  )
+}
+
+// ─── Wrapper dengan Suspense — INI yang di-export sebagai page ───
+export default function TambahLogAktivitasPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gray-50 p-6 text-gray-900">
+          Loading...
+        </main>
+      }
+    >
+      <TambahLogAktivitasContent />
+    </Suspense>
   )
 }
