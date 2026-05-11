@@ -25,7 +25,7 @@ type FormState = {
   nama: string
   email: string
   no_hp: string
-  kata_sandi: string
+  password: string
   status_akun: "aktif" | "nonaktif"
   catatan: string
 }
@@ -34,7 +34,7 @@ const emptyForm: FormState = {
   nama: "",
   email: "",
   no_hp: "",
-  kata_sandi: "",
+  password: "",
   status_akun: "aktif",
   catatan: "",
 }
@@ -92,11 +92,42 @@ export default function PengelolaPage() {
       .eq("role", "pengelola")
       .order("nama", { ascending: true })
 
+    console.log("FETCH PENGELOLA data:", data)
+    console.log("FETCH PENGELOLA error:", error)
+
     if (error) {
-      console.log("FETCH PENGELOLA ERROR:", error)
+      // Jika error karena kolom status_akun / catatan / no_hp tidak ada,
+      // fallback ke select minimal
+      const { data: dataFallback, error: errorFallback } = await supabase
+        .from("users")
+        .select("id, nama, email, role")
+        .eq("role", "pengelola")
+        .order("nama", { ascending: true })
+
+      console.log("FALLBACK data:", dataFallback)
+      console.log("FALLBACK error:", errorFallback)
+
+      const mapped = (dataFallback || []).map((u) => ({
+        ...u,
+        no_hp: null,
+        status_akun: "aktif" as const,
+        catatan: null,
+      }))
+
+      setPengelolaList(mapped as PengelolaItem[])
+      setLoading(false)
+      return
     }
 
-    setPengelolaList((data || []) as PengelolaItem[])
+    // Normalisasi: pastikan status_akun selalu ada nilainya
+    const normalized = (data || []).map((u) => ({
+      ...u,
+      status_akun: (u.status_akun as "aktif" | "nonaktif") ?? "aktif",
+      no_hp: u.no_hp ?? null,
+      catatan: u.catatan ?? null,
+    }))
+
+    setPengelolaList(normalized as PengelolaItem[])
     setLoading(false)
   }
 
@@ -128,7 +159,7 @@ export default function PengelolaPage() {
       nama: pengelola.nama,
       email: pengelola.email,
       no_hp: pengelola.no_hp || "",
-      kata_sandi: "",
+      password: "",
       status_akun: pengelola.status_akun,
       catatan: pengelola.catatan || "",
     })
@@ -150,7 +181,7 @@ export default function PengelolaPage() {
       return
     }
 
-    if (!isEditing && !form.kata_sandi.trim()) {
+    if (!isEditing && !form.password.trim()) {
       setFormError("Kata sandi wajib diisi untuk pengelola baru.")
       return
     }
@@ -167,8 +198,8 @@ export default function PengelolaPage() {
         catatan: form.catatan.trim(),
       }
 
-      if (form.kata_sandi.trim()) {
-        updatePayload.kata_sandi = form.kata_sandi.trim()
+      if (form.password.trim()) {
+        updatePayload.password = form.password.trim()
       }
 
       const { error } = await supabase
@@ -200,7 +231,7 @@ export default function PengelolaPage() {
         nama: form.nama.trim(),
         email: form.email.trim(),
         no_hp: form.no_hp.trim() || null,
-        kata_sandi: form.kata_sandi.trim(),
+        password: form.password.trim(),
         role: "pengelola",
         status_akun: form.status_akun,
         catatan: form.catatan.trim() || null,
@@ -553,9 +584,9 @@ export default function PengelolaPage() {
                 </label>
                 <input
                   type="password"
-                  value={form.kata_sandi}
+                  value={form.password}
                   onChange={(e) =>
-                    setForm({ ...form, kata_sandi: e.target.value })
+                    setForm({ ...form, password: e.target.value })
                   }
                   placeholder="••••••••"
                   className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
