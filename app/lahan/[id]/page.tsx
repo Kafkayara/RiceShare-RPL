@@ -302,6 +302,10 @@ function buildTimeline(
       if (template.startOffset === template.endOffset) {
         startDate = endDate
       }
+      
+      if (endDate < startDate) {
+        startDate = endDate
+      }
     }
 
     items.push({
@@ -310,7 +314,13 @@ function buildTimeline(
       startDate,
       endDate,
       tanggalText: formatTimelineDate(startDate, endDate),
-      status: getTimelineStatus(today, startDate, endDate, template.label, aktivitasLogs),
+      status: getTimelineStatus(
+        today,
+        startDate,
+        endDate,
+        template.label,
+        aktivitasLogs
+      ),
     })
   }
 
@@ -503,10 +513,81 @@ export default function DetailLahanPage() {
 
   const editableTimelineItems =
     currentTimelineIndex <= 0
-      ? timeline.slice(0, 1)
-      : timeline.slice(currentTimelineIndex - 1, currentTimelineIndex + 1)
+      ? timeline.slice(0, 2)
+      : timeline.slice(currentTimelineIndex - 1, currentTimelineIndex + 2)
 
-  const editMaxDate = currentTimeline?.endDate || today
+  const currentEditMaxDate = currentTimeline?.endDate || today
+
+  function getEditDateLimit(item: TimelineItem) {
+    const itemIndex = timeline.findIndex(
+      (timelineItem) => timelineItem.key === item.key
+    )
+
+    if (itemIndex === -1) {
+      return {
+        min: "",
+        max: today,
+      }
+    }
+
+    const previousItem = timeline[itemIndex - 1]
+    const isPreviousStage = itemIndex < currentTimelineIndex
+    const isCurrentStage = itemIndex === currentTimelineIndex
+    const isNextStage = itemIndex > currentTimelineIndex
+
+    if (item.key === "mulai_tanam") {
+      return {
+        min: "",
+        max: today,
+      }
+    }
+
+    if (isPreviousStage) {
+      return {
+        min: previousItem?.endDate || jadwalTerbaru?.tanggal_mulai || "",
+        max: today,
+      }
+    }
+
+    if (isCurrentStage) {
+      return {
+        min: previousItem?.endDate || jadwalTerbaru?.tanggal_mulai || "",
+        max: item.endDate,
+      }
+    }
+
+    if (isNextStage) {
+      return {
+        min: today,
+        max: item.endDate,
+      }
+    }
+
+    return {
+      min: previousItem?.endDate || "",
+      max: item.endDate,
+    }
+  }
+
+  function getEditItemDescription(item: TimelineItem) {
+    const itemIndex = timeline.findIndex(
+      (timelineItem) => timelineItem.key === item.key
+    )
+
+    if (itemIndex < currentTimelineIndex) {
+      return "Koreksi jadwal tahap sebelumnya."
+    }
+
+    if (itemIndex === currentTimelineIndex) {
+      return "Penyesuaian jadwal tahap saat ini."
+    }
+
+    if (itemIndex > currentTimelineIndex) {
+      return "Rencana ulang jadwal tahap selanjutnya."
+    }
+
+    return "Perubahan jadwal."
+  }
 
   const hariKe =
     jadwalTerbaru?.tanggal_mulai &&
@@ -543,7 +624,9 @@ export default function DetailLahanPage() {
     const initialEditDates: Record<string, string> = {}
 
     editableTimelineItems.forEach((item) => {
-      initialEditDates[item.key] = item.endDate
+      if (item.key !== "mulai_tanam") {
+        initialEditDates[item.key] = item.endDate
+      }
     })
 
     setEditTanggalMulai(jadwalTerbaru.tanggal_mulai || "")
@@ -595,56 +678,36 @@ export default function DetailLahanPage() {
 
     setSavingEdit(true)
 
-    if (currentTimelineIndex <= 0) {
-      if (!editTanggalMulai) {
-        alert("Tanggal mulai tanam wajib diisi.")
-        setSavingEdit(false)
-        return
-      }
-
-      if (editTanggalMulai > editMaxDate) {
-        alert(`Tanggal mulai tanam tidak boleh lebih dari ${formatDateId(editMaxDate)}.`)
-        setSavingEdit(false)
-        return
-      }
-
-      const newTimeline = buildTimeline(editTanggalMulai, today, {}, aktivitasLogs)
-      const newPanenEstimasi = newTimeline.find(
-        (item) => item.key === "panen_estimasi"
-      )
-
-      const { error } = await supabase
-        .from("jadwal_tanam")
-        .update({
-          tanggal_mulai: editTanggalMulai,
-          tanggal_selesai:
-            newPanenEstimasi?.endDate || addDays(editTanggalMulai, 105),
-          varietas_padi: editVarietasPadi.trim(),
-          jumlah_benih: jumlahBenihNumber,
-          catatan: editCatatan.trim() || null,
-          timeline_overrides: {},
-        })
-        .eq("id", jadwalTerbaru.id)
-
-      if (error) {
-        console.log("UPDATE JADWAL ERROR:", error)
-        alert("Gagal mengubah jadwal tanam. Cek console browser.")
-        setSavingEdit(false)
-        return
-      }
-
-      setSavingEdit(false)
-      setShowEditModal(false)
-      await fetchLahanDetail()
-      return
-    }
-
     const updatedOverrides: TimelineOverrides = {
       ...(jadwalTerbaru.timeline_overrides || {}),
     }
 
+    let updatedTanggalMulai = jadwalTerbaru.tanggal_mulai
+
     for (const item of editableTimelineItems) {
+      if (item.key === "mulai_tanam") {
+        const limit = getEditDateLimit(item)
+
+        if (!editTanggalMulai) {
+          alert("Tanggal mulai tanam wajib diisi.")
+          setSavingEdit(false)
+          return
+        }
+
+        if (limit.max && editTanggalMulai > limit.max) {
+          alert(
+            `Tanggal mulai tanam tidak boleh lebih dari ${formatDateId(limit.max)}.`
+          )
+          setSavingEdit(false)
+          return
+        }
+
+        updatedTanggalMulai = editTanggalMulai
+        continue
+      }
+
       const editedDate = editTimelineDates[item.key]
+      const limit = getEditDateLimit(item)
 
       if (!editedDate) {
         alert(`Tanggal ${item.label} wajib diisi.`)
@@ -652,8 +715,22 @@ export default function DetailLahanPage() {
         return
       }
 
-      if (editedDate > editMaxDate) {
-        alert(`Tanggal ${item.label} tidak boleh lebih dari ${formatDateId(editMaxDate)}.`)
+      if (limit.min && editedDate < limit.min) {
+        alert(
+          `Tanggal ${item.label} tidak boleh lebih awal dari ${formatDateId(
+            limit.min
+          )}.`
+        )
+        setSavingEdit(false)
+        return
+      }
+
+      if (limit.max && editedDate > limit.max) {
+        alert(
+          `Tanggal ${item.label} tidak boleh lebih dari ${formatDateId(
+            limit.max
+          )}.`
+        )
         setSavingEdit(false)
         return
       }
@@ -661,20 +738,37 @@ export default function DetailLahanPage() {
       updatedOverrides[item.key] = editedDate
     }
 
-    const newTimeline = buildTimeline(
-      jadwalTerbaru.tanggal_mulai,
+    const validationTimeline = buildTimeline(
+      updatedTanggalMulai,
       today,
       updatedOverrides,
       aktivitasLogs
     )
 
-    const newPanenEstimasi = newTimeline.find(
+    for (const item of editableTimelineItems) {
+      const updatedItem = validationTimeline.find(
+        (timelineItem) => timelineItem.key === item.key
+      )
+
+      if (!updatedItem) continue
+
+      if (updatedItem.endDate < updatedItem.startDate) {
+        alert(
+          `Jadwal ${updatedItem.label} tidak valid. Tanggal akhir tidak boleh lebih awal dari tanggal mulai tahap tersebut.`
+        )
+        setSavingEdit(false)
+        return
+      }
+    }
+
+    const newPanenEstimasi = validationTimeline.find(
       (item) => item.key === "panen_estimasi"
     )
 
     const { error } = await supabase
       .from("jadwal_tanam")
       .update({
+        tanggal_mulai: updatedTanggalMulai,
         tanggal_selesai:
           newPanenEstimasi?.endDate || jadwalTerbaru.tanggal_selesai,
         varietas_padi: editVarietasPadi.trim(),
@@ -1028,27 +1122,40 @@ export default function DetailLahanPage() {
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <div className="mb-4">
               <p className="text-sm font-medium text-blue-700">Edit Jadwal</p>
-              <h2 className="text-xl font-bold">Ubah Jadwal Tanam</h2>
+              <h2 className="text-xl font-bold">Koreksi / Rencana Ulang Jadwal</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Kamu bisa mengubah tahap sebelumnya, tahap saat ini, dan tahap selanjutnya.
+              </p>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
-              {currentTimelineIndex <= 0 ? (
-                <div>
-                  <label className="mb-1 block text-sm font-medium">
-                    Tanggal Mulai Tanam
-                  </label>
+              <div className="space-y-4">
+                {editableTimelineItems.map((item) => {
+                  const limit = getEditDateLimit(item)
 
-                  <input
-                    type="date"
-                    max={editMaxDate}
-                    value={editTanggalMulai}
-                    onChange={(e) => setEditTanggalMulai(e.target.value)}
-                    className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {editableTimelineItems.map((item) => (
+                  if (item.key === "mulai_tanam") {
+                    return (
+                      <div key={item.key}>
+                        <label className="mb-1 block text-sm font-medium">
+                          Tanggal Mulai Tanam
+                        </label>
+
+                        <input
+                          type="date"
+                          max={limit.max || undefined}
+                          value={editTanggalMulai}
+                          onChange={(e) => setEditTanggalMulai(e.target.value)}
+                          className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          {getEditItemDescription(item)} Saat ini: {item.tanggalText}
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  return (
                     <div key={item.key}>
                       <label className="mb-1 block text-sm font-medium">
                         Tanggal Akhir {item.label}
@@ -1056,7 +1163,8 @@ export default function DetailLahanPage() {
 
                       <input
                         type="date"
-                        max={editMaxDate}
+                        min={limit.min || undefined}
+                        max={limit.max || undefined}
                         value={editTimelineDates[item.key] || ""}
                         onChange={(e) =>
                           setEditTimelineDates((prev) => ({
@@ -1068,12 +1176,12 @@ export default function DetailLahanPage() {
                       />
 
                       <p className="mt-1 text-xs text-gray-500">
-                        Saat ini: {item.tanggalText}
+                        {getEditItemDescription(item)} Saat ini: {item.tanggalText}
                       </p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  )
+                })}
+              </div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium">
@@ -1119,6 +1227,7 @@ export default function DetailLahanPage() {
                 <textarea
                   value={editCatatan}
                   onChange={(e) => setEditCatatan(e.target.value)}
+                  placeholder="Tambahkan catatan perubahan jadwal, kondisi lapangan, alasan percepatan, penundaan, atau koreksi data."
                   className="min-h-24 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
