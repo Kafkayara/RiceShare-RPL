@@ -253,7 +253,7 @@ export default function LaporanPage() {
 
   if (checkingUser) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f4fff7]">
+      <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 p-6">
         <div className="rounded-3xl bg-white px-8 py-6 shadow-xl">
           <p className="text-lg font-semibold text-green-700">
             Memuat laporan...
@@ -266,12 +266,12 @@ export default function LaporanPage() {
   if (!user) return null
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#f3fff7] via-[#f7fafc] to-[#eefbf2] text-gray-900">
+    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
       <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-6 md:py-7">
 
         <header className="relative overflow-hidden rounded-[32px] border border-green-100 bg-white/90 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.06)] backdrop-blur">
-          <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-green-100 blur-3xl" />
-          <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-emerald-50 blur-3xl" />
+          
+          
 
           <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
