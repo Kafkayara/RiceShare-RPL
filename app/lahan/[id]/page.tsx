@@ -655,10 +655,19 @@ useEffect(() => {
                 Lahan
               </button>
 
-              
+              {isPengelola && (
+                <button
+                  onClick={() => router.push(`/log/tambah?lahan_id=${lahanId}`)}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
+                >
+                  <ClipboardList size={18} />
+                  Tambah Log
+                </button>
+              )}
+
               <button
                onClick={() => router.push("/dashboard")}
-               className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
+               className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
               >
                  Dashboard
               </button>

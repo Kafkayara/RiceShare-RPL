@@ -34,10 +34,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [showProfile, setShowProfile] = useState(false)
 
-  const [lahanAktif, setLahanAktif] = useState(12)
-  const [lahanSiapPanen, setLahanSiapPanen] = useState(4)
-  const [lahanIstirahat, setLahanIstirahat] = useState(3)
-  const [notifications, setNotifications] = useState(6)
+  const [lahanAktif, setLahanAktif] = useState(0)
+  const [lahanSiapPanen, setLahanSiapPanen] = useState(0)
+  const [lahanIstirahat, setLahanIstirahat] = useState(0)
+  const [perluPerhatian, setPerluPerhatian] = useState(0)
 
   useEffect(() => {
     const savedUser = localStorage.getItem("riceshare_user")
@@ -63,17 +63,46 @@ export default function DashboardPage() {
       .select("*")
 
     if (data) {
+      // Lahan Aktif = semua lahan yang sedang dalam siklus produksi aktif
       setLahanAktif(
-        data.filter((x) => x.status === "masa_tanam_aktif").length
+        data.filter((x) =>
+          ["masa_tanam_aktif", "menjelang_panen", "siap_tanam_kembali"].includes(x.status)
+        ).length
       )
 
+      // Siap Panen = khusus menjelang_panen
       setLahanSiapPanen(
         data.filter((x) => x.status === "menjelang_panen").length
       )
 
+      // Masa Istirahat = istirahat + panen_selesai
       setLahanIstirahat(
-        data.filter((x) => x.status === "istirahat").length
+        data.filter((x) =>
+          ["istirahat", "panen_selesai"].includes(x.status)
+        ).length
       )
+
+      // Perlu Perhatian = lahan yang jadwal aktivitasnya terlewat
+      // Ambil jadwal yang sudah lewat tanggal selesai tapi status belum panen_selesai
+      const today = new Date().toISOString().split("T")[0]
+      const { data: jadwalData } = await supabase
+        .from("jadwal_tanam")
+        .select("lahan_id, tanggal_selesai, status")
+
+      if (jadwalData) {
+        // Lahan yang jadwalnya sudah lewat tapi belum selesai dipanen
+        const lahanTerlambat = new Set(
+          jadwalData
+            .filter(
+              (j) =>
+                j.tanggal_selesai &&
+                j.tanggal_selesai < today &&
+                !["panen_selesai", "istirahat", "siap_tanam_kembali", "belum_digunakan"].includes(j.status)
+            )
+            .map((j) => j.lahan_id)
+        )
+        setPerluPerhatian(lahanTerlambat.size)
+      }
     }
 
     setLoading(false)
@@ -433,7 +462,7 @@ export default function DashboardPage() {
 
                 <div className="rounded-3xl border border-red-200 bg-white/80 p-4 shadow-xl md:p-6">
                   <p className="text-3xl font-bold text-red-700 md:text-4xl">
-                    {notifications}
+                    {perluPerhatian}
                   </p>
 
                   <p className="mt-2 text-sm font-semibold md:text-base">
@@ -574,9 +603,9 @@ export default function DashboardPage() {
                 >
                   <Icon size={20} />
 
-                  {item.label === "Notif" && notifications > 0 && (
+                  {item.label === "Notif" && perluPerhatian > 0 && (
                     <span className="absolute right-4 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                      {notifications}
+                      {perluPerhatian}
                     </span>
                   )}
 
