@@ -160,6 +160,22 @@ const timelineTemplates: TimelineTemplate[] = [
   },
 ]
 
+// Mapping fleksibel: nama-nama alternatif yang dianggap cocok per template key
+const AKTIVITAS_ALIASES: Record<string, string[]> = {
+  mulai_tanam:       ["mulai tanam", "tanam", "pindah tanam", "mulai"],
+  cek_adaptasi_bibit:["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
+  pemupukan_1:       ["pemupukan 1", "pemupukan", "pupuk", "pemupukan pertama"],
+  cek_hama:          ["cek hama", "hama", "pengecekan hama", "semprot hama", "pestisida"],
+  panen_estimasi:    ["panen estimasi", "panen", "panen raya", "panen selesai"],
+  masa_istirahat:    ["masa istirahat", "istirahat", "jeda", "pengolahan lahan"],
+}
+
+function aktivitasCocok(jenis: string, templateKey: string, templateLabel: string): boolean {
+  const j = jenis.toLowerCase().trim()
+  const aliases = AKTIVITAS_ALIASES[templateKey] || [templateLabel.toLowerCase()]
+  return aliases.some((alias) => j.includes(alias) || alias.includes(j))
+}
+
 function getTodayDateInputValue() {
   const today = new Date()
 
@@ -256,8 +272,7 @@ function buildKalenderItems(
     const sudahAdaLog = aktivitasLogs.some(
       (log) =>
         log.lahan_id === jadwal.lahan_id &&
-        log.jenis_aktivitas ===
-          template.label &&
+        aktivitasCocok(log.jenis_aktivitas, template.key, template.label) &&
         log.tanggal >= startDate &&
         log.tanggal <= endDate
     )
@@ -452,9 +467,8 @@ export default function KalenderPage() {
 
     const { data: logData } = await supabase
       .from("aktivitas_log")
-      .select(
-        "id, lahan_id, tanggal, jenis_aktivitas"
-      )
+      .select("id, lahan_id, tanggal, jenis_aktivitas")
+      .order("tanggal", { ascending: false })
 
     setJadwalList(
       (jadwalData || []) as unknown as JadwalTanam[]

@@ -61,67 +61,62 @@ function getTimelineDate(
 function getTargetStatus(
   currentStatus: LahanStatus,
   tanggalMulai: string,
-  overrides: TimelineOverrides | null | undefined
+  overrides: TimelineOverrides | null | undefined,
+  panenTanggal: string | null   // tanggal panen aktual dari tabel panen
 ): LahanStatus {
   const today = getTodayDateInputValue()
 
   const mulaiMenjelangPanen = getTimelineDate(
-    tanggalMulai,
-    overrides,
-    "menjelang_panen",
-    70
+    tanggalMulai, overrides, "menjelang_panen", 70
   )
 
   const akhirPanenEstimasi = getTimelineDate(
-    tanggalMulai,
-    overrides,
-    "panen_estimasi",
-    105
+    tanggalMulai, overrides, "panen_estimasi", 105
   )
 
+  // Masa istirahat mulai 7 hari setelah panen aktual (atau akhir estimasi)
+  const acuanPanen = panenTanggal || akhirPanenEstimasi
   const mulaiIstirahat = getTimelineDate(
-    tanggalMulai,
-    overrides,
-    "masa_istirahat",
-    119
+    acuanPanen, overrides, "masa_istirahat", 7
   )
 
+  // Siap tanam kembali: 21 hari setelah mulai istirahat
   const siapTanamKembali = getTimelineDate(
-    tanggalMulai,
-    overrides,
-    "siap_tanam_kembali",
-    120
+    mulaiIstirahat, overrides, "siap_tanam_kembali", 21
   )
 
+  // 1. Sudah lewat masa istirahat → siap tanam kembali
   if (today >= siapTanamKembali) {
     return "siap_tanam_kembali"
   }
 
-  if (
-    currentStatus === "panen_selesai" &&
-    today > akhirPanenEstimasi &&
-    today < siapTanamKembali
-  ) {
+  // 2. Panen selesai → langsung masuk istirahat setelah 7 hari
+  if (currentStatus === "panen_selesai") {
+    if (today >= mulaiIstirahat) return "istirahat"
+    // Belum 7 hari pasca panen, tetap panen_selesai
+    return "panen_selesai"
+  }
+
+  // 3. Sedang istirahat → tunggu siapTanamKembali (sudah ditangani di atas)
+  if (currentStatus === "istirahat") {
     return "istirahat"
   }
 
-  if (
-    today >= mulaiMenjelangPanen &&
-    today <= akhirPanenEstimasi &&
-    currentStatus !== "panen_selesai" &&
-    currentStatus !== "istirahat" &&
-    currentStatus !== "siap_tanam_kembali"
-  ) {
-    return "menjelang_panen"
-  }
+  // 4. Sedang masa tanam aktif atau menjelang panen
+  const statusAktif: LahanStatus[] = [
+    "masa_tanam_aktif", "menjelang_panen"
+  ]
 
-  if (
-    today < mulaiMenjelangPanen &&
-    currentStatus !== "panen_selesai" &&
-    currentStatus !== "istirahat" &&
-    currentStatus !== "siap_tanam_kembali"
-  ) {
-    return "masa_tanam_aktif"
+  if (statusAktif.includes(currentStatus)) {
+    if (today >= mulaiMenjelangPanen && today <= akhirPanenEstimasi) {
+      return "menjelang_panen"
+    }
+    if (today < mulaiMenjelangPanen) {
+      return "masa_tanam_aktif"
+    }
+    // Sudah lewat estimasi panen tapi belum ada record panen
+    // Tetap di menjelang_panen agar pengelola ingat input panen
+    return "menjelang_panen"
   }
 
   return currentStatus
@@ -155,8 +150,20 @@ export async function syncLahanStatus() {
     return
   }
 
-  const latestJadwalByLahan = new Map<string, JadwalTanam>()
+  // Ambil tanggal panen aktual terbaru per lahan
+  const { data: panenList } = await supabase
+    .from("panen")
+    .select("lahan_id, tanggal")
+    .order("tanggal", { ascending: false })
 
+  const latestPanenByLahan = new Map<string, string>()
+  ;(panenList || []).forEach((p: { lahan_id: string; tanggal: string }) => {
+    if (!latestPanenByLahan.has(p.lahan_id)) {
+      latestPanenByLahan.set(p.lahan_id, p.tanggal)
+    }
+  })
+
+  const latestJadwalByLahan = new Map<string, JadwalTanam>()
   ;(jadwalList || []).forEach((jadwal) => {
     if (!latestJadwalByLahan.has(jadwal.lahan_id)) {
       latestJadwalByLahan.set(jadwal.lahan_id, jadwal)
@@ -166,31 +173,27 @@ export async function syncLahanStatus() {
   for (const lahan of lahanList || []) {
     const jadwal = latestJadwalByLahan.get(lahan.id)
 
-    if (!jadwal?.tanggal_mulai) {
-      continue
-    }
+    if (!jadwal?.tanggal_mulai) continue
 
     const currentStatus = lahan.status as LahanStatus
 
-    if (currentStatus === "belum_digunakan") {
-      continue
-    }
+    if (currentStatus === "belum_digunakan") continue
+
+    // Tanggal panen aktual jika sudah ada record panen
+    const panenTanggal = latestPanenByLahan.get(lahan.id) || null
 
     const targetStatus = getTargetStatus(
       currentStatus,
       jadwal.tanggal_mulai,
-      jadwal.timeline_overrides || {}
+      jadwal.timeline_overrides || {},
+      panenTanggal
     )
 
-    if (targetStatus === currentStatus) {
-      continue
-    }
+    if (targetStatus === currentStatus) continue
 
     const { error: updateLahanError } = await supabase
       .from("lahan")
-      .update({
-        status: targetStatus,
-      })
+      .update({ status: targetStatus })
       .eq("id", lahan.id)
 
     if (updateLahanError) {
@@ -200,9 +203,7 @@ export async function syncLahanStatus() {
 
     const { error: updateJadwalError } = await supabase
       .from("jadwal_tanam")
-      .update({
-        status: targetStatus,
-      })
+      .update({ status: targetStatus })
       .eq("id", jadwal.id)
 
     if (updateJadwalError) {

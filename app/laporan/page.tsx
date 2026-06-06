@@ -447,6 +447,158 @@ export default function LaporanPage() {
         )}
 
       </div>
+
+      {/* ── MODAL OVERVIEW LAPORAN ───────────────────────────────────────── */}
+      {selectedLaporan && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
+          <div className="relative my-8 w-full max-w-3xl rounded-[32px] bg-white shadow-2xl">
+
+            {/* Header modal */}
+            <div className="flex items-start justify-between border-b p-6">
+              <div>
+                <p className="text-sm font-medium text-green-700">Overview Laporan</p>
+                <h2 className="mt-1 text-2xl font-black">
+                  {selectedLaporan.panen.lahan?.lokasi || "Lahan"}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {getPeriodeLaporan(selectedLaporan)}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedLaporan(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-500 hover:bg-red-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-6 p-6">
+
+              {/* ── Info Lahan ── */}
+              <section>
+                <h3 className="mb-3 font-bold text-gray-700">📋 Informasi Lahan</h3>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {[
+                    { label: "Lokasi",    value: selectedLaporan.panen.lahan?.lokasi || "-" },
+                    { label: "Luas",      value: selectedLaporan.panen.lahan?.luas ? `${selectedLaporan.panen.lahan.luas} ha` : "-" },
+                    { label: "Varietas",  value: selectedLaporan.jadwal?.varietas_padi || "-" },
+                    { label: "Mulai Tanam", value: formatDateId(selectedLaporan.jadwal?.tanggal_mulai) },
+                    { label: "Tanggal Panen", value: formatDateId(selectedLaporan.panen.tanggal) },
+                    { label: "Jumlah Benih", value: selectedLaporan.jadwal?.jumlah_benih ? `${selectedLaporan.jadwal.jumlah_benih} kg` : "-" },
+                  ].map((row) => (
+                    <div key={row.label} className="rounded-2xl bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">{row.label}</p>
+                      <p className="mt-0.5 font-bold text-gray-800">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Hasil Panen & Bagi Hasil ── */}
+              <section>
+                <h3 className="mb-3 font-bold text-gray-700">🌾 Hasil Panen & Bagi Hasil</h3>
+                {(() => {
+                  const bh = getBagiHasil(selectedLaporan)
+                  return (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-2xl bg-green-50 p-4">
+                        <p className="text-xs text-green-700">Total GKP</p>
+                        <p className="mt-1 text-xl font-black text-green-900">
+                          {formatKg(selectedLaporan.panen.berat_gkp)} kg
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-emerald-50 p-4">
+                        <p className="text-xs text-emerald-700">Total Beras</p>
+                        <p className="mt-1 text-xl font-black text-emerald-900">
+                          {formatKg(bh?.total_beras)} kg
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-blue-50 p-4">
+                        <p className="text-xs text-blue-700">Bagian Pemilik</p>
+                        <p className="mt-1 text-xl font-black text-blue-900">
+                          {formatKg(bh?.porsi_pemilik)} kg
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-amber-50 p-4">
+                        <p className="text-xs text-amber-700">Bagian Pengelola</p>
+                        <p className="mt-1 text-xl font-black text-amber-900">
+                          {formatKg(bh?.porsi_pengelola)} kg
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {selectedLaporan.panen.catatan && (
+                  <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-xs text-gray-500">Catatan Panen</p>
+                    <p className="mt-1 text-sm text-gray-700">{selectedLaporan.panen.catatan}</p>
+                  </div>
+                )}
+              </section>
+
+              {/* ── Riwayat Aktivitas ── */}
+              <section>
+                <h3 className="mb-3 font-bold text-gray-700">
+                  📝 Riwayat Aktivitas
+                  <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                    {selectedLaporan.aktivitas.length} aktivitas
+                  </span>
+                </h3>
+
+                {selectedLaporan.aktivitas.length === 0 ? (
+                  <div className="rounded-2xl bg-gray-50 p-5 text-center text-sm text-gray-500">
+                    Tidak ada log aktivitas untuk periode ini.
+                  </div>
+                ) : (
+                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {selectedLaporan.aktivitas.map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-3"
+                      >
+                        <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-gray-800 text-sm">
+                              {log.jenis_aktivitas}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {formatDateId(log.tanggal)}
+                            </span>
+                          </div>
+                          {log.deskripsi && (
+                            <p className="mt-0.5 text-xs text-gray-500 line-clamp-2">
+                              {log.deskripsi}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Footer modal */}
+            <div className="flex justify-end gap-3 border-t p-6">
+              <button
+                onClick={() => setSelectedLaporan(null)}
+                className="rounded-2xl border px-5 py-2.5 text-sm font-semibold hover:bg-gray-50"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => handleDownloadPdf(selectedLaporan)}
+                className="rounded-2xl bg-gradient-to-r from-green-600 to-emerald-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg hover:-translate-y-0.5 transition-all"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   )
 }
