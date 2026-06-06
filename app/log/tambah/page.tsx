@@ -147,6 +147,33 @@ function isDateInRange(date: string, startDate: string, endDate: string) {
   return date >= startDate && date <= endDate
 }
 
+// Alias fleksibel per template key — sama polanya dengan kalender
+const AKTIVITAS_ALIASES: Record<string, string[]> = {
+  mulai_tanam:                    ["mulai tanam", "tanam", "pindah tanam", "mulai"],
+  cek_adaptasi_bibit:             ["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
+  pemupukan_1:                    ["pemupukan 1", "pemupukan", "pupuk", "pemupukan pertama"],
+  pantau_pertumbuhan_awal:        ["pantau pertumbuhan awal", "pantau pertumbuhan", "pertumbuhan awal", "pantau"],
+  persiapan_pengendalian_gulma:   ["persiapan pengendalian gulma", "pengendalian gulma", "gulma", "persiapan gulma"],
+  bersihkan_gulma:                ["bersihkan gulma", "bersih gulma", "cabut gulma"],
+  pemupukan_2:                    ["pemupukan 2", "pemupukan kedua", "pupuk 2"],
+  perawatan_lanjutan:             ["perawatan lanjutan", "perawatan", "lanjutan", "pemeliharaan"],
+  cek_hama:                       ["cek hama", "hama", "pengecekan hama", "semprot hama", "pestisida", "penanganan hama"],
+  menjelang_panen:                ["menjelang panen", "persiapan panen", "pra panen"],
+  panen_estimasi:                 ["panen estimasi", "panen", "panen raya", "panen selesai"],
+  masa_istirahat:                 ["masa istirahat", "istirahat", "jeda", "pengolahan lahan"],
+  siap_tanam_kembali:             ["siap tanam kembali", "siap tanam", "tanam kembali"],
+}
+
+function aktivitasSudahDicatat(
+  jenisAktivitas: string,
+  templateKey: string,
+  templateLabel: string
+): boolean {
+  const j = jenisAktivitas.toLowerCase().trim()
+  const aliases = AKTIVITAS_ALIASES[templateKey] || [templateLabel.toLowerCase()]
+  return aliases.some((alias) => j.includes(alias) || alias.includes(j))
+}
+
 // ─── Komponen utama dipisah agar useSearchParams bisa dibungkus Suspense ───
 function TambahLogAktivitasContent() {
   const router = useRouter()
@@ -187,16 +214,31 @@ function TambahLogAktivitasContent() {
 
   const availableActivities = useMemo(() => {
     if (!tanggal) return []
+
+    // Kalau tidak ada jadwal tanam, izinkan input aktivitas bebas
+    if (timeline.length === 0) {
+      return [
+        { key: "aktivitas_bebas", label: "Pemupukan", startDate: tanggal, endDate: tanggal, tanggalText: "" },
+        { key: "aktivitas_bebas_2", label: "Pengairan", startDate: tanggal, endDate: tanggal, tanggalText: "" },
+        { key: "aktivitas_bebas_3", label: "Cek Hama", startDate: tanggal, endDate: tanggal, tanggalText: "" },
+        { key: "aktivitas_bebas_4", label: "Perawatan Lahan", startDate: tanggal, endDate: tanggal, tanggalText: "" },
+        { key: "aktivitas_bebas_5", label: "Lainnya", startDate: tanggal, endDate: tanggal, tanggalText: "" },
+      ]
+    }
+
     return timeline.filter((item) => {
       const sedangBerjalan = isDateInRange(tanggal, item.startDate, item.endDate)
+
+      // Cek apakah aktivitas ini sudah pernah dicatat pakai pencocokan fleksibel
       const sudahAdaLog = aktivitasLogs.some((log) => {
         return (
-          log.jenis_aktivitas === item.label &&
+          aktivitasSudahDicatat(log.jenis_aktivitas, item.key, item.label) &&
           log.tanggal &&
           log.tanggal >= item.startDate &&
           log.tanggal <= item.endDate
         )
       })
+
       return sedangBerjalan && !sudahAdaLog
     })
   }, [timeline, tanggal, aktivitasLogs])
@@ -382,12 +424,8 @@ function TambahLogAktivitasContent() {
       alert("Tanggal aktivitas tidak boleh lebih dari hari ini.")
       return
     }
-    if (!jadwalTanam) {
-      alert("Lahan ini belum memiliki jadwal tanam aktif.")
-      return
-    }
     if (availableActivities.length === 0) {
-      alert("Tidak ada aktivitas terjadwal yang bisa dicatat pada tanggal ini.")
+      alert("Tidak ada aktivitas yang bisa dicatat pada tanggal ini.")
       return
     }
     if (!jenisAktivitas) {
@@ -555,11 +593,11 @@ function TambahLogAktivitasContent() {
 
               {lahanId && !loadingLahanDetail && !jadwalTanam && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  Lahan ini belum memiliki jadwal tanam aktif.
+                  ⚠️ Lahan ini belum memiliki jadwal tanam aktif. Kamu tetap bisa mencatat aktivitas bebas.
                 </div>
               )}
 
-              {lahanId && !loadingLahanDetail && jadwalTanam && (
+              {lahanId && !loadingLahanDetail && (
                 <>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
@@ -662,7 +700,6 @@ function TambahLogAktivitasContent() {
                   type="submit"
                   disabled={
                     loading ||
-                    !jadwalTanam ||
                     !tanggal ||
                     availableActivities.length === 0
                   }

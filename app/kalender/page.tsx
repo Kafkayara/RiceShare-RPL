@@ -92,11 +92,9 @@ const timelineTemplates: TimelineTemplate[] = [
     shortLabel: "Mulai",
     startOffset: 0,
     endOffset: 0,
-    color:
-      "bg-purple-100 text-purple-700 border-purple-200",
+    color: "bg-purple-100 text-purple-700 border-purple-200",
     dotColor: "bg-purple-500",
-    description:
-      "Melakukan pindah tanam bibit ke lahan utama.",
+    description: "Melakukan pindah tanam bibit ke lahan utama.",
   },
   {
     key: "cek_adaptasi_bibit",
@@ -104,23 +102,59 @@ const timelineTemplates: TimelineTemplate[] = [
     shortLabel: "Bibit",
     startOffset: 1,
     endOffset: 7,
-    color:
-      "bg-green-100 text-green-700 border-green-200",
+    color: "bg-green-100 text-green-700 border-green-200",
     dotColor: "bg-green-500",
-    description:
-      "Mengecek kondisi bibit setelah pindah tanam.",
+    description: "Mengecek kondisi bibit setelah pindah tanam.",
   },
   {
     key: "pemupukan_1",
     label: "Pemupukan 1",
-    shortLabel: "Pupuk",
+    shortLabel: "Pupuk 1",
     startOffset: 7,
     endOffset: 14,
-    color:
-      "bg-green-100 text-green-700 border-green-200",
-    dotColor: "bg-green-500",
-    description:
-      "Memberikan pupuk awal untuk mendukung pertumbuhan tanaman.",
+    color: "bg-lime-100 text-lime-700 border-lime-200",
+    dotColor: "bg-lime-500",
+    description: "Memberikan pupuk awal untuk mendukung pertumbuhan tanaman.",
+  },
+  {
+    key: "pantau_pertumbuhan_awal",
+    label: "Pantau Pertumbuhan Awal",
+    shortLabel: "Pantau",
+    startOffset: 14,
+    endOffset: 21,
+    color: "bg-teal-100 text-teal-700 border-teal-200",
+    dotColor: "bg-teal-500",
+    description: "Pemantauan pertumbuhan awal tanaman padi.",
+  },
+  {
+    key: "persiapan_pengendalian_gulma",
+    label: "Pengendalian Gulma",
+    shortLabel: "Gulma",
+    startOffset: 21,
+    endOffset: 35,
+    color: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    dotColor: "bg-yellow-500",
+    description: "Persiapan dan pengendalian gulma di lahan.",
+  },
+  {
+    key: "pemupukan_2",
+    label: "Pemupukan 2",
+    shortLabel: "Pupuk 2",
+    startOffset: 35,
+    endOffset: 40,
+    color: "bg-lime-100 text-lime-700 border-lime-200",
+    dotColor: "bg-lime-500",
+    description: "Pemupukan kedua untuk mendukung pertumbuhan.",
+  },
+  {
+    key: "perawatan_lanjutan",
+    label: "Perawatan Lanjutan",
+    shortLabel: "Rawat",
+    startOffset: 40,
+    endOffset: 60,
+    color: "bg-cyan-100 text-cyan-700 border-cyan-200",
+    dotColor: "bg-cyan-500",
+    description: "Perawatan dan pemeliharaan lanjutan termasuk pengairan.",
   },
   {
     key: "cek_hama",
@@ -128,11 +162,9 @@ const timelineTemplates: TimelineTemplate[] = [
     shortLabel: "Hama",
     startOffset: 60,
     endOffset: 69,
-    color:
-      "bg-yellow-100 text-yellow-700 border-yellow-200",
-    dotColor: "bg-yellow-500",
-    description:
-      "Memperketat pengawasan terhadap hama dan penyakit.",
+    color: "bg-orange-100 text-orange-700 border-orange-200",
+    dotColor: "bg-orange-500",
+    description: "Memperketat pengawasan terhadap hama dan penyakit.",
   },
   {
     key: "panen_estimasi",
@@ -140,11 +172,9 @@ const timelineTemplates: TimelineTemplate[] = [
     shortLabel: "Panen",
     startOffset: 80,
     endOffset: 105,
-    color:
-      "bg-red-100 text-red-700 border-red-200",
+    color: "bg-red-100 text-red-700 border-red-200",
     dotColor: "bg-red-500",
-    description:
-      "Periode estimasi panen padi.",
+    description: "Periode estimasi panen padi.",
   },
   {
     key: "masa_istirahat",
@@ -152,22 +182,24 @@ const timelineTemplates: TimelineTemplate[] = [
     shortLabel: "Istirahat",
     startOffset: 106,
     endOffset: 119,
-    color:
-      "bg-blue-100 text-blue-700 border-blue-200",
+    color: "bg-blue-100 text-blue-700 border-blue-200",
     dotColor: "bg-blue-500",
-    description:
-      "Masa jeda untuk mengistirahatkan lahan.",
+    description: "Masa jeda untuk mengistirahatkan lahan.",
   },
 ]
 
-// Mapping fleksibel: nama-nama alternatif yang dianggap cocok per template key
+// Alias fleksibel — kata kunci spesifik agar tidak false-match antar aktivitas
 const AKTIVITAS_ALIASES: Record<string, string[]> = {
-  mulai_tanam:       ["mulai tanam", "tanam", "pindah tanam", "mulai"],
-  cek_adaptasi_bibit:["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
-  pemupukan_1:       ["pemupukan 1", "pemupukan", "pupuk", "pemupukan pertama"],
-  cek_hama:          ["cek hama", "hama", "pengecekan hama", "semprot hama", "pestisida"],
-  panen_estimasi:    ["panen estimasi", "panen", "panen raya", "panen selesai"],
-  masa_istirahat:    ["masa istirahat", "istirahat", "jeda", "pengolahan lahan"],
+  mulai_tanam:                  ["mulai tanam", "pindah tanam", "awal tanam"],
+  cek_adaptasi_bibit:           ["cek adaptasi bibit", "adaptasi bibit", "cek bibit"],
+  pemupukan_1:                  ["pemupukan 1", "pemupukan pertama", "pupuk 1", "pupuk pertama"],
+  pantau_pertumbuhan_awal:      ["pantau pertumbuhan awal", "pertumbuhan awal", "pantau pertumbuhan"],
+  persiapan_pengendalian_gulma: ["pengendalian gulma", "persiapan gulma", "bersihkan gulma", "cabut gulma", "gulma"],
+  pemupukan_2:                  ["pemupukan 2", "pemupukan kedua", "pupuk 2", "pupuk kedua"],
+  perawatan_lanjutan:           ["perawatan lanjutan", "perawatan", "pemeliharaan", "pengairan"],
+  cek_hama:                     ["cek hama", "pengecekan hama", "semprot hama", "pestisida", "penanganan hama", "hama"],
+  panen_estimasi:               ["panen estimasi", "panen raya", "panen selesai", "panen"],
+  masa_istirahat:               ["masa istirahat", "pengolahan lahan pasca panen", "istirahat lahan"],
 }
 
 function aktivitasCocok(jenis: string, templateKey: string, templateLabel: string): boolean {
