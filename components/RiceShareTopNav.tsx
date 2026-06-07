@@ -327,10 +327,36 @@ export default function RiceShareTopNav({
   const router = useRouter()
   const pathname = usePathname()
   const [showProfile, setShowProfile] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [internalNotificationCount, setInternalNotificationCount] = useState(0)
 
   const displayedNotificationCount =
     notificationCount ?? internalNotificationCount
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1099px)")
+
+    const updateIsMobile = () => {
+      setIsMobile(mediaQuery.matches)
+    }
+
+    updateIsMobile()
+
+    document.body.style.paddingBottom = mediaQuery.matches ? "78px" : ""
+
+    const updateBodyPadding = () => {
+      document.body.style.paddingBottom = mediaQuery.matches ? "78px" : ""
+    }
+
+    mediaQuery.addEventListener("change", updateIsMobile)
+    mediaQuery.addEventListener("change", updateBodyPadding)
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateIsMobile)
+      mediaQuery.removeEventListener("change", updateBodyPadding)
+      document.body.style.paddingBottom = ""
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -376,18 +402,18 @@ export default function RiceShareTopNav({
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-green-100 bg-white/90 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex h-[86px] max-w-7xl items-center justify-between gap-4 px-4 md:px-6">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-3 px-4 md:h-[86px] md:px-6">
           {/* LOGO */}
           <button
             onClick={() => router.push("/dashboard")}
             className="flex items-center gap-3"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-green-600 to-lime-500 text-2xl text-white shadow-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-600 to-lime-500 text-xl text-white shadow-lg md:h-12 md:w-12 md:text-2xl">
               🌾
             </div>
 
             <div className="text-left">
-              <h1 className="text-xl font-extrabold text-green-700 md:text-2xl">
+              <h1 className="text-lg font-extrabold text-green-700 md:text-2xl">
                 RiceShare
               </h1>
               <p className="hidden text-xs font-medium text-gray-500 sm:block">
@@ -397,7 +423,8 @@ export default function RiceShareTopNav({
           </button>
 
           {/* TOP MENU */}
-          <nav className="hidden flex-1 items-center justify-center gap-2 overflow-x-auto px-2 md:flex">
+          {!isMobile && (
+          <nav className="flex flex-1 items-center justify-center gap-2 overflow-x-auto px-2">
             {menus.map((item) => {
               const Icon = item.icon
               const active = isActive(item.match)
@@ -422,6 +449,7 @@ export default function RiceShareTopNav({
               )
             })}
           </nav>
+          )}
 
           {/* RIGHT ACTIONS */}
           <div className="flex items-center gap-3">
@@ -441,7 +469,7 @@ export default function RiceShareTopNav({
             <div className="relative">
               <button
                 onClick={() => setShowProfile(!showProfile)}
-                className="flex items-center gap-3 rounded-full border border-green-100 bg-white px-2 py-2 shadow-sm transition hover:bg-green-50 md:rounded-2xl md:px-3"
+                className="flex items-center gap-2 rounded-full border border-green-100 bg-white px-2 py-2 shadow-sm transition hover:bg-green-50 md:gap-3 md:rounded-2xl md:px-3"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-green-700">
                   👤
@@ -490,7 +518,18 @@ export default function RiceShareTopNav({
       </header>
 
       {/* MOBILE BOTTOM NAV */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-green-100 bg-white/95 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">
+      {isMobile && (
+        <nav
+          className="border-t border-green-100 bg-white/95 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl"
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            paddingBottom: "env(safe-area-inset-bottom)",
+          }}
+        >
         <div
           className="mx-auto grid max-w-xl px-2 py-2"
           style={{
@@ -505,17 +544,18 @@ export default function RiceShareTopNav({
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition-all ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-2xl px-1.5 py-2 text-[10px] font-semibold transition-all ${
                   active ? "text-green-700" : "text-gray-500 hover:bg-green-50"
                 }`}
               >
                 <Icon size={20} />
-                {item.label}
+                <span className="max-w-full truncate">{item.label}</span>
               </button>
             )
           })}
         </div>
       </nav>
+      )}
     </>
   )
 }
