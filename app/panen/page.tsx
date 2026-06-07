@@ -276,17 +276,18 @@ export default function PanenPage() {
     }
 
     const { data: panen, error: panenError } = await supabase
-      .from("panen")
-      .insert([
-        {
-          lahan_id: lahanId,
-          berat_gkp: beratNumber,
-          tanggal,
-          catatan: catatan || null,
-          bukti_url: buktiUrl,
-        },
-      ])
-      .select()
+  .from("panen")
+  .insert([
+    {
+      lahan_id: lahanId,
+      pengelola_id: user.id,
+      berat_gkp: beratNumber,
+      tanggal,
+      catatan: catatan || null,
+      bukti_url: buktiUrl,
+    },
+  ])
+  .select()
 
     if (panenError || !panen) {
       console.log("PANEN ERROR:", panenError)

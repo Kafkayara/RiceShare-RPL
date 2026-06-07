@@ -146,27 +146,9 @@ export default function RiwayatPanenPage() {
 
     const { data: panenData, error: panenError } = await supabase
       .from("panen")
-      .select(`
-        id,
-        lahan_id,
-        pengelola_id,
-        berat_gkp,
-        tanggal,
-        catatan,
-        bukti_url,
-        created_at,
-        lahan (
-          id,
-          lokasi,
-          luas,
-          status
-        ),
-        bagi_hasil (
-          total_beras,
-          porsi_pemilik,
-          porsi_pengelola
-        )
-      `)
+      .select("*")
+      .order("tanggal", { ascending: false })
+     .order("created_at", { ascending: false })
       .order("tanggal", { ascending: false })
       .order("created_at", { ascending: false })
 

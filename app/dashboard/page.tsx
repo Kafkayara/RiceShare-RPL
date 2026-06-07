@@ -26,12 +26,18 @@ type UserProfile = {
   email: string
   role: "pemilik" | "pengelola"
 }
-
+function formatMonthYear(date: Date) {
+  return date.toLocaleDateString("id-ID", {
+    month: "long",
+    year: "numeric",
+  })
+}
 export default function DashboardPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const today = new Date()
   const [showProfile, setShowProfile] = useState(false)
 
   const [lahanAktif, setLahanAktif] = useState(0)
@@ -488,7 +494,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="w-fit rounded-2xl bg-green-100 px-4 py-2 text-sm font-semibold text-green-700">
-                  Mei 2026
+                  {formatMonthYear(today)}
                 </div>
               </div>
 

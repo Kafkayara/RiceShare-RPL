@@ -231,13 +231,15 @@ function TambahLogAktivitasContent() {
 
       // Cek apakah aktivitas ini sudah pernah dicatat pakai pencocokan fleksibel
       const sudahAdaLog = aktivitasLogs.some((log) => {
-        return (
-          aktivitasSudahDicatat(log.jenis_aktivitas, item.key, item.label) &&
-          log.tanggal &&
-          log.tanggal >= item.startDate &&
-          log.tanggal <= item.endDate
-        )
-      })
+  return (
+    aktivitasSudahDicatat(
+      log.jenis_aktivitas,
+      item.key,
+      item.label
+    ) &&
+    log.tanggal === tanggal
+  )
+})
 
       return sedangBerjalan && !sudahAdaLog
     })
@@ -691,7 +693,7 @@ function TambahLogAktivitasContent() {
               <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                 <button
                   type="button"
-                  onClick={() => router.push("/log")}
+                  onClick={() => router.back()}
                   className="w-full rounded-2xl border border-gray-200 bg-white px-5 py-3 font-medium transition-all hover:bg-gray-50 sm:w-1/2"
                 >
                   Batal
