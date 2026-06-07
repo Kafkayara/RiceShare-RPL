@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronDown,
   Sprout,
+  UsersRound,
 } from "lucide-react"
 
 import { supabase } from "@/lib/supabase"
@@ -59,6 +60,16 @@ const mainMenus = [
     label: "Laporan",
     path: "/laporan",
     match: ["/laporan", "/panen"],
+  },
+]
+
+
+const ownerOnlyMenus = [
+  {
+    icon: UsersRound,
+    label: "Pengelola",
+    path: "/pengelola",
+    match: ["/pengelola"],
   },
 ]
 
@@ -357,6 +368,11 @@ export default function RiceShareTopNav({
     router.push("/")
   }
 
+  const menus =
+    user.role === "pemilik"
+      ? [...mainMenus, ...ownerOnlyMenus]
+      : mainMenus
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-green-100 bg-white/90 shadow-sm backdrop-blur-xl">
@@ -380,9 +396,9 @@ export default function RiceShareTopNav({
             </div>
           </button>
 
-          {/* DESKTOP TOP MENU */}
-          <nav className="hidden items-center gap-3 lg:flex">
-            {mainMenus.map((item) => {
+          {/* TOP MENU */}
+          <nav className="hidden flex-1 items-center justify-center gap-2 overflow-x-auto px-2 md:flex">
+            {menus.map((item) => {
               const Icon = item.icon
               const active = isActive(item.match)
 
@@ -390,7 +406,7 @@ export default function RiceShareTopNav({
                 <button
                   key={item.path}
                   onClick={() => router.push(item.path)}
-                  className={`relative flex min-w-[126px] items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold transition-all ${
+                  className={`relative flex min-w-max items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition-all ${
                     active
                       ? "bg-green-50 text-green-700 shadow-sm"
                       : "text-gray-800 hover:bg-green-50 hover:text-green-700"
@@ -474,9 +490,14 @@ export default function RiceShareTopNav({
       </header>
 
       {/* MOBILE BOTTOM NAV */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-green-100 bg-white/95 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5 px-2 py-2">
-          {mainMenus.map((item) => {
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-green-100 bg-white/95 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">
+        <div
+          className="mx-auto grid max-w-xl px-2 py-2"
+          style={{
+            gridTemplateColumns: `repeat(${menus.length}, minmax(0, 1fr))`,
+          }}
+        >
+          {menus.map((item) => {
             const Icon = item.icon
             const active = isActive(item.match)
 
