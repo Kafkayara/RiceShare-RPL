@@ -4,6 +4,7 @@ import { syncLahanStatus } from "@/lib/syncLahanStatus"
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 
 type UserProfile = {
   id: string
@@ -280,7 +281,6 @@ export default function PanenPage() {
   .insert([
     {
       lahan_id: lahanId,
-      pengelola_id: user.id,
       berat_gkp: beratNumber,
       tanggal,
       catatan: catatan || null,
@@ -290,8 +290,26 @@ export default function PanenPage() {
   .select()
 
     if (panenError || !panen) {
-      console.log("PANEN ERROR:", panenError)
-      alert("Gagal menyimpan data panen.")
+      console.log("PANEN ERROR:", {
+        message: panenError?.message,
+        details: panenError?.details,
+        hint: panenError?.hint,
+        code: panenError?.code,
+        raw: panenError,
+      })
+
+      alert(
+        [
+          "Gagal menyimpan data panen.",
+          panenError?.message ? `Pesan: ${panenError.message}` : "",
+          panenError?.details ? `Detail: ${panenError.details}` : "",
+          panenError?.hint ? `Hint: ${panenError.hint}` : "",
+          panenError?.code ? `Kode: ${panenError.code}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      )
+
       setLoading(false)
       return
     }
@@ -391,12 +409,12 @@ export default function PanenPage() {
 
   const handleExit = () => {
     resetForm()
-    router.push("/dashboard")
+    router.push("/laporan")
   }
 
   if (checkingUser) {
     return (
-      <main className="min-h-screen bg-gray-50 p-6 text-gray-900">
+      <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
         Loading...
       </main>
     )
@@ -409,37 +427,34 @@ export default function PanenPage() {
   const isPengelola = user.role === "pengelola"
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
-      <div className="mx-auto w-full max-w-4xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-green-100 bg-white/80 p-5 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-        
-          <div>
-            <p className="text-sm font-medium text-green-700">RiceShare</p>
-            <h1 className="text-2xl font-bold">Input Panen</h1>
-            <p className="text-sm text-slate-500">
-               Pencatatan hasil panen dan pembagian hasil.
-             </p>
-          </div>
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} />
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              onClick={() => router.push("/panen/riwayat")}
-              className="rounded-2xl border border-green-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-green-50"
-            >
-              Riwayat Panen
-            </button>
+      <div className="pb-28 lg:pb-10">
+        <div className="mx-auto w-full max-w-4xl px-4 py-5 md:px-6 md:py-6">
+          <section className="mb-6 rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-green-700">RiceShare</p>
+                <h1 className="mt-1 text-3xl font-bold">Input Panen</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  Pencatatan hasil panen dan pembagian hasil.
+                </p>
+              </div>
 
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
-            >
-              Dashboard
-            </button>
-          </div>
-        </header>
+              <div className="flex flex-col gap-3 sm:flex-row">
+<button
+                  onClick={() => router.push("/laporan")}
+                  className="rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-bold text-gray-700 transition-all hover:bg-green-50"
+                >
+                  Laporan
+                </button>
+              </div>
+            </div>
+          </section>
 
         {!isPengelola && (
-          <section className="mb-6 rounded-3xl border border-yellow-100 bg-white/80 p-5 shadow-lg backdrop-blur-sm">
+          <section className="mb-6 rounded-[28px] border border-yellow-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.06)]">
             <h2 className="font-semibold text-yellow-900">Mode Pemilik</h2>
             <p className="text-sm text-yellow-800">
               Pemilik hanya bisa melihat data panen. Input panen hanya dapat
@@ -449,7 +464,7 @@ export default function PanenPage() {
         )}
 
         {isPengelola && (
-          <section className="rounded-3xl border border-green-100 bg-white/80 p-6 shadow-lg backdrop-blur-sm">
+          <section className="rounded-[28px] border border-green-100 bg-white p-6 shadow-[0_10px_35px_rgba(15,23,42,0.07)]">
             {lahanList.length === 0 ? (
               <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
                 Tidak ada lahan yang sedang berstatus siap panen.
@@ -613,7 +628,7 @@ export default function PanenPage() {
                 <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => router.push("/dashboard")}
+                    onClick={() => router.push("/laporan")}
                     className="w-full rounded-xl border px-4 py-2 font-medium hover:bg-gray-50 sm:w-1/2"
                   >
                     Batal
@@ -631,6 +646,7 @@ export default function PanenPage() {
             )}
           </section>
         )}
+        </div>
       </div>
 
       {showResultModal && result && (

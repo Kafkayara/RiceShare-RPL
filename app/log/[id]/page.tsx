@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 
 type UserProfile = {
   id: string
@@ -147,7 +148,7 @@ export default function DetailLogAktivitasPage() {
 
   if (checkingUser) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 p-6 text-gray-900">
+      <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
         Loading...
       </main>
     )
@@ -158,31 +159,35 @@ export default function DetailLogAktivitasPage() {
   const isPengelola = user.role === "pengelola"
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
-      <div className="mx-auto w-full max-w-4xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 overflow-hidden rounded-[30px] border border-green-100 bg-white/80 p-5 shadow-2xl backdrop-blur-xl">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} />
+
+      <div className="pb-28 lg:pb-10">
+        <div className="mx-auto w-full max-w-4xl px-4 py-5 md:px-6 md:py-6">
+        <section className="mb-6 rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-green-700">
+                RiceShare
+              </p>
+
+              <h1 className="mt-1 text-3xl font-bold">
+                Detail Log Aktivitas
+              </h1>
+
+              <p className="mt-2 text-sm text-gray-500">
+                Informasi lengkap aktivitas pengelolaan lahan.
+              </p>
+            </div>
+
             <button
               onClick={() => router.push("/log")}
               className="rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-green-50"
             >
-              ← Kembali ke Riwayat Log
-            </button>
-
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-green-50"
-            >
-              Dashboard
+              ← Riwayat Log
             </button>
           </div>
-
-          <p className="text-sm font-semibold tracking-wide text-green-700">RiceShare</p>
-          <h1 className="text-2xl font-bold">Detail Log Aktivitas</h1>
-          <p className="text-sm text-gray-500">
-            Informasi lengkap aktivitas pengelolaan lahan.
-          </p>
-        </header>
+        </section>
 
         {loadingData ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -299,6 +304,7 @@ export default function DetailLogAktivitasPage() {
             </section>
           </>
         )}
+        </div>
       </div>
     </main>
   )

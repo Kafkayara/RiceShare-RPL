@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 import {
-  LayoutDashboard,
-  RefreshCcw,
   Plus,
   ClipboardList,
-  Search,
   Filter,
-  ChevronRight,
+  X,
 } from "lucide-react"
 
 type UserProfile = {
@@ -113,6 +111,7 @@ export default function LogAktivitasPage() {
   const [selectedJenis, setSelectedJenis] = useState("semua")
   const [selectedTanggal, setSelectedTanggal] = useState("")
   const [searchKeyword, setSearchKeyword] = useState("")
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
 
   useEffect(() => {
     const savedUser = localStorage.getItem("riceshare_user")
@@ -216,6 +215,75 @@ export default function LogAktivitasPage() {
     searchKeyword,
   ])
 
+  const selectedLahanName = useMemo(() => {
+    if (selectedLahanId === "semua") return ""
+
+    return (
+      lahanList.find((lahan) => lahan.id === selectedLahanId)?.lokasi || ""
+    )
+  }, [lahanList, selectedLahanId])
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string }[] = []
+
+    if (searchKeyword.trim()) {
+      filters.push({
+        key: "search",
+        label: `Cari: ${searchKeyword.trim()}`,
+      })
+    }
+
+    if (selectedLahanId !== "semua") {
+      filters.push({
+        key: "lahan",
+        label: `Lahan: ${selectedLahanName || "Dipilih"}`,
+      })
+    }
+
+    if (selectedJenis !== "semua") {
+      filters.push({
+        key: "jenis",
+        label: `Aktivitas: ${selectedJenis}`,
+      })
+    }
+
+    if (selectedTanggal) {
+      filters.push({
+        key: "tanggal",
+        label: `Tanggal: ${formatDateId(selectedTanggal)}`,
+      })
+    }
+
+    return filters
+  }, [
+    searchKeyword,
+    selectedLahanId,
+    selectedLahanName,
+    selectedJenis,
+    selectedTanggal,
+  ])
+
+  const removeFilter = (key: string) => {
+    if (key === "search") {
+      setSearchKeyword("")
+      return
+    }
+
+    if (key === "lahan") {
+      setSelectedLahanId("semua")
+      return
+    }
+
+    if (key === "jenis") {
+      setSelectedJenis("semua")
+      return
+    }
+
+    if (key === "tanggal") {
+      setSelectedTanggal("")
+    }
+  }
+
   const resetFilter = () => {
     setSelectedLahanId("semua")
     setSelectedJenis("semua")
@@ -236,9 +304,11 @@ export default function LogAktivitasPage() {
   const isPengelola = user.role === "pengelola"
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} />
+      <div className="pb-28 lg:pb-10">
       <div className="mx-auto max-w-7xl px-4 py-6">
-        <header className="mb-6 overflow-hidden rounded-[30px] border border-green-100 bg-white/80 p-5 shadow-2xl backdrop-blur-xl md:flex md:items-center md:justify-between">
+        <header className="mb-6 overflow-hidden rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)] md:flex md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium text-green-700">RiceShare</p>
             <h1 className="text-2xl font-bold">Riwayat Log Aktivitas</h1>
@@ -258,12 +328,7 @@ export default function LogAktivitasPage() {
               </button>
             )}
 
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
-            >
-              Dashboard
-            </button>
+
           </div>
         </header>
 
@@ -290,95 +355,149 @@ export default function LogAktivitasPage() {
         </section>
 
         <section className="mb-6 rounded-[28px] border border-green-100 bg-white/80 p-5 shadow-xl">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Cari Log
-              </label>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => setShowFilterPanel((prev) => !prev)}
+                className={`flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 text-sm font-bold transition ${
+                  showFilterPanel
+                    ? "border-green-500 bg-green-600 text-white shadow-lg"
+                    : "border-green-200 bg-white text-green-700 hover:bg-green-50"
+                }`}
+              >
+                <Filter size={17} />
+                Filter
+                {activeFilters.length > 0 && (
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${
+                    showFilterPanel
+                      ? "bg-white text-green-700"
+                      : "bg-green-100 text-green-700"
+                  }`}>
+                    {activeFilters.length}
+                  </span>
+                )}
+              </button>
 
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Cari aktivitas, lahan, deskripsi"
-                className="w-full rounded-2xl border border-green-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Filter Lahan
-              </label>
-
-              <div className="relative">
-                <select
-                  value={selectedLahanId}
-                  onChange={(e) => setSelectedLahanId(e.target.value)}
-                  className="w-full appearance-none rounded-2xl border border-green-200 bg-white px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="semua">Semua lahan</option>
-
-                  {lahanList.map((lahan) => (
-                    <option key={lahan.id} value={lahan.id}>
-                      {lahan.lokasi} - {lahan.luas} m²
-                    </option>
+              {activeFilters.length === 0 ? (
+                <p className="text-sm font-medium text-gray-500">
+                  Belum ada filter aktif.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {activeFilters.map((filter) => (
+                    <span
+                      key={filter.key}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700"
+                    >
+                      {filter.label}
+                      <button
+                        type="button"
+                        onClick={() => removeFilter(filter.key)}
+                        className="rounded-full p-0.5 transition hover:bg-green-200"
+                        aria-label={`Hapus filter ${filter.label}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
                   ))}
-                </select>
-
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
-                  ▾
-                </span>
-              </div>
+                </div>
+              )}
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Jenis Aktivitas
-              </label>
-
-              <div className="relative">
-                <select
-                  value={selectedJenis}
-                  onChange={(e) => setSelectedJenis(e.target.value)}
-                  className="w-full appearance-none rounded-2xl border border-green-200 bg-white px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="semua">Semua aktivitas</option>
-
-                  {jenisOptions.map((jenis) => (
-                    <option key={jenis} value={jenis}>
-                      {jenis}
-                    </option>
-                  ))}
-                </select>
-
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
-                  ▾
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Tanggal
-              </label>
-
-              <input
-                type="date"
-                value={selectedTanggal}
-                onChange={(e) => setSelectedTanggal(e.target.value)}
-                className="w-full rounded-2xl border border-green-200 px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
+            {activeFilters.length > 0 && (
+              <button
+                type="button"
+                onClick={resetFilter}
+                className="rounded-2xl border border-green-200 bg-white px-4 py-2 text-sm font-bold text-green-700 transition hover:bg-green-50"
+              >
+                Reset Semua
+              </button>
+            )}
           </div>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <button
-              onClick={resetFilter}
-              className="rounded-2xl border border-green-200 bg-white px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
-            >
-              Reset Filter
-            </button>
-          </div>
+          {showFilterPanel && (
+            <div className="mt-5 grid grid-cols-1 gap-4 rounded-[24px] border border-green-100 bg-green-50/40 p-4 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Cari Log
+                </label>
+
+                <input
+                  type="text"
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  placeholder="Cari aktivitas, lahan, deskripsi"
+                  className="w-full rounded-2xl border border-green-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Filter Lahan
+                </label>
+
+                <div className="relative">
+                  <select
+                    value={selectedLahanId}
+                    onChange={(e) => setSelectedLahanId(e.target.value)}
+                    className="w-full appearance-none rounded-2xl border border-green-200 bg-white px-3 py-3 pr-10 outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="semua">Semua lahan</option>
+
+                    {lahanList.map((lahan) => (
+                      <option key={lahan.id} value={lahan.id}>
+                        {lahan.lokasi} - {lahan.luas} m²
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                    ▾
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Jenis Aktivitas
+                </label>
+
+                <div className="relative">
+                  <select
+                    value={selectedJenis}
+                    onChange={(e) => setSelectedJenis(e.target.value)}
+                    className="w-full appearance-none rounded-2xl border border-green-200 bg-white px-3 py-3 pr-10 outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="semua">Semua aktivitas</option>
+
+                    {jenisOptions.map((jenis) => (
+                      <option key={jenis} value={jenis}>
+                        {jenis}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                    ▾
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Tanggal
+                </label>
+
+                <input
+                  type="date"
+                  value={selectedTanggal}
+                  onChange={(e) => setSelectedTanggal(e.target.value)}
+                  className="w-full rounded-2xl border border-green-200 bg-white px-3 py-3 outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+          )}
         </section>
 
         {loadingData ? (
@@ -463,6 +582,7 @@ export default function LogAktivitasPage() {
             ))}
           </section>
         )}
+      </div>
       </div>
     </main>
   )

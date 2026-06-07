@@ -1,16 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { syncLahanStatus } from "@/lib/syncLahanStatus"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 import {
   ArrowLeft,
   CalendarDays,
   ClipboardList,
   Leaf,
   MapPinned,
-  RefreshCcw,
   Sprout,
   Wheat,
   PencilLine,
@@ -276,10 +276,9 @@ function getTimelineStatus(
 ): "selesai" | "berjalan" | "belum" {
   const sudahAdaLog = aktivitasLogs.some((log) => {
     return (
-      log.jenis_aktivitas === label &&
+      doesLogMatchTimeline(label, log.jenis_aktivitas) &&
       !!log.tanggal &&
-      log.tanggal >= startDate &&
-      log.tanggal <= endDate
+      log.tanggal >= startDate
     )
   })
 
@@ -359,18 +358,84 @@ function getCurrentStage(timeline: TimelineItem[]) {
   return "Menunggu tahap berikutnya"
 }
 
-function getTimelineDotStyle(status: TimelineItem["status"]) {
-  switch (status) {
-    case "selesai":
-      return "bg-green-600 border-green-600 text-white"
-
-    case "berjalan":
-      return "bg-green-100 border-green-500 text-green-700"
-
-    default:
-      return "bg-white border-gray-300 text-gray-400"
+function getTimelineDotStyle(item: TimelineItem, today: string) {
+  if (item.status === "selesai") {
+    return "bg-green-600 border-green-600 text-white"
   }
+
+  if (item.status === "berjalan") {
+    return "bg-green-100 border-green-500 text-green-700"
+  }
+
+  if (item.endDate < today) {
+    return "bg-green-100 border-green-500 text-green-700"
+  }
+
+  return "bg-white border-gray-300 text-gray-400"
 }
+
+function normalizeActivityText(value?: string | null) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function doesLogMatchTimeline(label: string, logType: string) {
+  const normalizedLabel = normalizeActivityText(label)
+  const normalizedLogType = normalizeActivityText(logType)
+
+  if (!normalizedLabel || !normalizedLogType) return false
+  if (normalizedLabel === normalizedLogType) return true
+
+  const aliases: Record<string, string[]> = {
+    "Mulai Tanam": ["mulai tanam", "tanam", "penanaman"],
+    "Cek Adaptasi Bibit": ["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
+    "Pemupukan 1": ["pemupukan 1", "pupuk 1", "pemupukan pertama"],
+    "Pantau Pertumbuhan Awal": ["pantau pertumbuhan awal", "pantau pertumbuhan", "pertumbuhan awal", "pantau"],
+    "Persiapan Pengendalian Gulma": ["persiapan pengendalian gulma", "pengendalian gulma", "persiapan gulma"],
+    "Bersihkan Gulma": ["bersihkan gulma", "bersih gulma", "pembersihan gulma"],
+    "Pemupukan 2": ["pemupukan 2", "pupuk 2", "pemupukan kedua"],
+    "Perawatan Lanjutan": ["perawatan lanjutan", "perawatan", "pemeliharaan lanjutan"],
+    "Cek Hama": ["cek hama", "pengecekan hama", "pengendalian hama"],
+    "Menjelang Panen": ["menjelang panen", "persiapan panen", "pra panen"],
+    "Panen Estimasi": ["panen estimasi", "panen", "input panen", "hasil panen"],
+    "Masa Istirahat": ["masa istirahat", "istirahat"],
+    "Siap Tanam Kembali": ["siap tanam kembali", "siap tanam", "tanam kembali"],
+  }
+
+  return (aliases[label] || []).some((alias) => {
+    return normalizeActivityText(alias) === normalizedLogType
+  })
+}
+
+function getTimelineItemIndex(key: string) {
+  return timelineTemplates.findIndex((template) => template.key === key)
+}
+
+function getEditableTimelineItems(timeline: TimelineItem[]) {
+  if (timeline.length === 0) return []
+
+  const currentIndex = timeline.findIndex(
+    (item) => item.status === "berjalan"
+  )
+
+  const fallbackIndex = timeline.findIndex(
+    (item) => item.status === "belum"
+  )
+
+  const activeIndex =
+    currentIndex >= 0
+      ? currentIndex
+      : fallbackIndex >= 0
+      ? fallbackIndex
+      : timeline.length - 1
+
+  return timeline.filter((_, index) => {
+    return Math.abs(index - activeIndex) <= 1
+  })
+}
+
 
 export default function DetailLahanPage() {
   const router = useRouter()
@@ -382,6 +447,8 @@ export default function DetailLahanPage() {
 
   const shouldOpenEditJadwal =
     searchParams.get("open_edit_jadwal") === "1"
+
+  const hasOpenedEditFromUrl = useRef(false)
 
   const [user, setUser] = useState<UserProfile | null>(null)
 
@@ -508,6 +575,21 @@ useEffect(() => {
       aktivitasLogs
     )
   }, [jadwalTerbaru, aktivitasLogs, today])
+
+  const editableTimelineItems = useMemo(() => {
+    return getEditableTimelineItems(timeline)
+  }, [timeline])
+
+  const editableTimelineDateItems = useMemo(() => {
+    return editableTimelineItems.filter(
+      (item) => item.key !== "mulai_tanam"
+    )
+  }, [editableTimelineItems])
+
+  const canEditTanggalMulai = editableTimelineItems.some(
+    (item) => item.key === "mulai_tanam"
+  )
+
 const openEditModal = () => {
         
   if (!jadwalTerbaru) {
@@ -517,10 +599,8 @@ const openEditModal = () => {
 
   const initialEditDates: Record<string, string> = {}
 
-  timeline.forEach((item) => {
-    if (item.key !== "mulai_tanam") {
-      initialEditDates[item.key] = item.endDate
-    }
+  editableTimelineDateItems.forEach((item) => {
+    initialEditDates[item.key] = item.endDate
   })
 
   setEditTanggalMulai(jadwalTerbaru.tanggal_mulai || "")
@@ -551,15 +631,20 @@ const openEditModal = () => {
 useEffect(() => {
   if (
     shouldOpenEditJadwal &&
+    !hasOpenedEditFromUrl.current &&
     jadwalTerbaru &&
     timeline.length > 0
   ) {
+    hasOpenedEditFromUrl.current = true
     openEditModal()
+    router.replace(`/lahan/${lahanId}`)
   }
 }, [
   shouldOpenEditJadwal,
-  jadwalTerbaru,
-  timeline
+  jadwalTerbaru?.id,
+  timeline.length,
+  router,
+  lahanId,
 ])
       const handleSaveEdit = async () => {
   try {
@@ -567,17 +652,50 @@ useEffect(() => {
 
     if (!jadwalTerbaru) return
 
+    const nextTimelineOverrides: TimelineOverrides = {
+      ...(jadwalTerbaru.timeline_overrides || {}),
+    }
+
+    const editedIndexes = editableTimelineDateItems
+      .map((item) => getTimelineItemIndex(item.key))
+      .filter((index) => index >= 0)
+
+    const lastEditedIndex =
+      editedIndexes.length > 0
+        ? Math.max(...editedIndexes)
+        : -1
+
+    editableTimelineDateItems.forEach((item) => {
+      const nextDate = editTimelineDates[item.key]
+
+      if (nextDate) {
+        nextTimelineOverrides[item.key] = nextDate
+      } else {
+        delete nextTimelineOverrides[item.key]
+      }
+    })
+
+    if (lastEditedIndex >= 0) {
+      timelineTemplates.forEach((template, index) => {
+        if (index > lastEditedIndex) {
+          delete nextTimelineOverrides[template.key]
+        }
+      })
+    }
+
     await supabase
       .from("jadwal_tanam")
       .update({
-        tanggal_mulai: editTanggalMulai,
+        tanggal_mulai: canEditTanggalMulai
+          ? editTanggalMulai
+          : jadwalTerbaru.tanggal_mulai,
         varietas_padi: editVarietasPadi,
         jumlah_benih:
   editJumlahBenih.trim() === ""
     ? null
     : Number(editJumlahBenih),
         catatan: editCatatan,
-        timeline_overrides: editTimelineDates,
+        timeline_overrides: nextTimelineOverrides,
       })
       .eq("id", jadwalTerbaru.id)
 
@@ -598,7 +716,7 @@ useEffect(() => {
 
   if (checkingUser) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 p-6">
+      <main className="min-h-screen bg-[#f7faf5] p-6">
         Loading...
       </main>
     )
@@ -609,44 +727,31 @@ useEffect(() => {
   const isPengelola = user.role === "pengelola"
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} />
 
-      <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-6 md:py-6">
+      <div className="pb-28 lg:pb-10">
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-6 md:py-6">
 
         {/* HEADER */}
-        <header className="mb-6 overflow-hidden rounded-[30px] border border-green-100 bg-white/80 shadow-2xl backdrop-blur-xl">
+        <section className="mb-6 rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-green-700">
+                RiceShare
+              </p>
 
-          <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:p-7">
+              <h1 className="mt-1 text-3xl font-bold">
+                {lahan ? `Lahan ${lahan.lokasi}` : "Detail Lahan"}
+              </h1>
 
-            <div className="min-w-0">
-
-              <div className="mb-3 flex items-center gap-3">
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg">
-                  <MapPinned size={24} />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-green-700">
-                    RiceShare
-                  </p>
-
-                  <h1 className="text-2xl font-bold md:text-3xl">
-                    {lahan
-                      ? `Lahan ${lahan.lokasi}`
-                      : "Detail Lahan"}
-                  </h1>
-                </div>
-              </div>
-
-              <p className="max-w-2xl text-sm leading-relaxed text-gray-500 md:text-base">
-                Pantau timeline pertanian, progres tanam,
-                estimasi panen, dan aktivitas terbaru pada lahan.
+              <p className="mt-2 text-sm text-gray-500">
+                Pantau timeline pertanian, progres tanam, estimasi panen,
+                dan aktivitas terbaru pada lahan.
               </p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
-
               <button
                 onClick={() => router.push("/lahan")}
                 className="flex items-center justify-center gap-2 rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-green-50"
@@ -658,23 +763,15 @@ useEffect(() => {
               {isPengelola && (
                 <button
                   onClick={() => router.push(`/log/tambah?lahan_id=${lahanId}`)}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
                 >
                   <ClipboardList size={18} />
                   Tambah Log
                 </button>
               )}
-
-              <button
-               onClick={() => router.push("/dashboard")}
-               className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:scale-[1.02]"
-              >
-                 Dashboard
-              </button>
-
             </div>
           </div>
-        </header>
+        </section>
 
         {loadingData ? (
           <section className="rounded-[30px] border border-green-100 bg-white/80 p-6 shadow-xl backdrop-blur-xl">
@@ -841,7 +938,8 @@ useEffect(() => {
 
                               <div
                                 className={`absolute -left-8 top-1 flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold ${getTimelineDotStyle(
-                                  item.status
+                                  item,
+                                  today
                                 )}`}
                               >
                                 {item.status === "selesai"
@@ -1098,6 +1196,7 @@ useEffect(() => {
             </section>
           </>
         )}
+        </div>
       </div>
       {showEditModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1129,8 +1228,15 @@ useEffect(() => {
       onChange={(e) =>
         setEditTanggalMulai(e.target.value)
       }
-      className="w-full rounded-xl border p-3"
+      disabled={!canEditTanggalMulai}
+      className="w-full rounded-xl border p-3 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
     />
+
+    {!canEditTanggalMulai && (
+      <p className="mt-2 text-xs text-gray-500">
+        Tanggal mulai dikunci karena tahap Mulai Tanam tidak berada dalam rentang edit saat ini.
+      </p>
+    )}
   </div>
 
   <div>
@@ -1177,17 +1283,22 @@ useEffect(() => {
     />
   </div>
 <div className="space-y-3">
-  <label className="block text-sm font-medium">
-    Timeline Pertanian
-  </label>
-
-  {timelineTemplates
-    .filter((item) => item.key !== "mulai_tanam")
-    .map((item) => (
+  {editableTimelineDateItems.length === 0 ? (
+    <div className="rounded-2xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+      Tidak ada tahap timeline yang bisa diedit saat ini.
+    </div>
+  ) : (
+    editableTimelineDateItems.map((item) => (
       <div key={item.key}>
-        <label className="mb-1 block text-sm text-gray-600">
-          {item.label}
-        </label>
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <label className="block text-sm text-gray-600">
+            {item.label}
+          </label>
+
+          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+            {item.status}
+          </span>
+        </div>
 
         <input
           type="date"
@@ -1200,8 +1311,13 @@ useEffect(() => {
           }
           className="w-full rounded-xl border p-3"
         />
+
+        <p className="mt-1 text-xs text-gray-500">
+          Jadwal saat ini: {item.tanggalText}
+        </p>
       </div>
-    ))}
+    ))
+  )}
 </div>
 <div className="mt-6 flex justify-end gap-3">
 

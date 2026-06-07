@@ -1,23 +1,23 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
-  RefreshCcw,
-  LayoutDashboard,
   MapPin,
   Sprout,
   AlertTriangle,
   CheckCircle2,
   Clock3,
   X,
+  Filter,
 } from "lucide-react"
 
 import { supabase } from "@/lib/supabase"
 import { syncLahanStatus } from "@/lib/syncLahanStatus"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 
 type UserProfile = {
   id: string
@@ -299,6 +299,14 @@ function buildKalenderItems(
 
     if (overrides[template.key]) {
       endDate = overrides[template.key]
+
+      if (template.startOffset === template.endOffset) {
+        startDate = endDate
+      }
+
+      if (endDate < startDate) {
+        startDate = endDate
+      }
     }
 
     const sudahAdaLog = aktivitasLogs.some(
@@ -425,8 +433,24 @@ function isItemOnDate(
   )
 }
 
+function canInputLogFromCalendar(
+  item: KalenderItem,
+  selectedDate: string,
+  today: string,
+  user: UserProfile | null
+) {
+  return (
+    user?.role === "pengelola" &&
+    item.status_jadwal !== "selesai" &&
+    selectedDate <= today &&
+    selectedDate >= item.tanggal_mulai &&
+    selectedDate <= item.tanggal_selesai
+  )
+}
+
 export default function KalenderPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [user, setUser] =
     useState<UserProfile | null>(null)
@@ -446,6 +470,9 @@ export default function KalenderPage() {
   const [selectedLahanId, setSelectedLahanId] =
     useState("semua")
 
+  const [showFilterPanel, setShowFilterPanel] =
+    useState(false)
+
   const [currentMonth, setCurrentMonth] =
     useState(() => new Date())
 
@@ -454,6 +481,9 @@ export default function KalenderPage() {
 
   const [selectedItem, setSelectedItem] =
     useState<KalenderItem | null>(null)
+
+  const tanggalFromUrl = searchParams.get("tanggal")
+  const rangeFromUrl = searchParams.get("range")
 
   const today = getTodayDateInputValue()
 
@@ -519,6 +549,13 @@ export default function KalenderPage() {
     }
   }, [checkingUser, user])
 
+  useEffect(() => {
+    if (!tanggalFromUrl) return
+
+    setSelectedDate(tanggalFromUrl)
+    setCurrentMonth(new Date(`${tanggalFromUrl}T00:00:00`))
+  }, [tanggalFromUrl])
+
   const kalenderItems = useMemo(() => {
     return jadwalList.flatMap((jadwal) =>
       buildKalenderItems(
@@ -537,6 +574,38 @@ export default function KalenderPage() {
       )
     })
   }, [kalenderItems, selectedLahanId])
+
+  const selectedLahanName = useMemo(() => {
+    if (selectedLahanId === "semua") return ""
+
+    return (
+      jadwalList.find((jadwal) => jadwal.lahan_id === selectedLahanId)
+        ?.lahan?.lokasi || ""
+    )
+  }, [jadwalList, selectedLahanId])
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string }[] = []
+
+    if (selectedLahanId !== "semua") {
+      filters.push({
+        key: "lahan",
+        label: `Lahan: ${selectedLahanName || "Dipilih"}`,
+      })
+    }
+
+    return filters
+  }, [selectedLahanId, selectedLahanName])
+
+  const removeFilter = (key: string) => {
+    if (key === "lahan") {
+      setSelectedLahanId("semua")
+    }
+  }
+
+  const resetFilter = () => {
+    setSelectedLahanId("semua")
+  }
 
   const calendarDays = useMemo(() => {
     return getCalendarDays(currentMonth)
@@ -559,7 +628,38 @@ export default function KalenderPage() {
     return map
   }, [calendarDays, filteredItems])
 
-  const monthItems = filteredItems
+  const displayedMonthStart = toDateInputValue(
+    new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth(),
+      1
+    )
+  )
+
+  const displayedMonthEnd = toDateInputValue(
+    new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() + 1,
+      0
+    )
+  )
+
+  const monthItems = filteredItems.filter((item) => {
+    return (
+      item.tanggal_mulai <= displayedMonthEnd &&
+      item.tanggal_selesai >= displayedMonthStart
+    )
+  })
+
+  const totalAktivitasBulanIni = new Set(
+    monthItems.map((item) =>
+      [
+        item.lahan_id,
+        item.jadwal_id,
+        item.key,
+      ].join("-")
+    )
+  ).size
 
   const todayItems = monthItems.filter(
     (item) => item.status_jadwal === "hari_ini"
@@ -584,84 +684,69 @@ export default function KalenderPage() {
   if (!user) return null
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} notificationCount={todayItems.length} />
 
+      <div className="pb-28 lg:pb-10">
       <div className="mx-auto max-w-7xl px-4 py-6">
 
         {/* HEADER */}
-        <section className="mb-6 rounded-[30px] border border-green-100 bg-white/80 p-5 shadow-2xl backdrop-blur-xl">
-
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
-            <div>
-              <p className="text-sm font-semibold text-green-700">
+        <header className="mb-6 overflow-hidden rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)] md:flex md:items-center md:justify-between">
+          <div>
+              <p className="text-sm font-medium text-green-700">
                 RiceShare
               </p>
 
-              <h1 className="mt-1 text-3xl font-bold">
+              <h1 className="text-2xl font-bold">
                 Kalender Tanam
               </h1>
 
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="text-sm text-gray-500">
                 Pantau seluruh jadwal aktivitas
                 pertanian dalam tampilan kalender.
               </p>
             </div>
-
-            <div className="flex flex-wrap gap-3">
-
-
-              <button
-                onClick={() =>
-                  router.push("/dashboard")
-                }
-                className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.02]"
-              >
-                Dashboard
-              </button>
-            </div>
-          </div>
-        </section>
+        </header>
 
         {/* STATS */}
-        <section className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
 
-          <div className="rounded-3xl border border-green-200 bg-white/80 p-5 shadow-xl">
-            <p className="text-sm font-medium text-gray-500">
-              Jadwal Bulan Ini
+          <div className="rounded-3xl border border-green-100 bg-white/80 p-5 shadow-lg">
+            <p className="text-sm text-gray-500">
+              Total Aktivitas Bulan Ini
             </p>
 
-            <h2 className="mt-3 text-4xl font-bold text-green-700">
-              {monthItems.length}
+            <h2 className="mt-2 text-2xl font-bold">
+              {totalAktivitasBulanIni}
             </h2>
           </div>
 
-          <div className="rounded-3xl border border-blue-200 bg-white/80 p-5 shadow-xl">
-            <p className="text-sm font-medium text-gray-500">
+          <div className="rounded-3xl border border-green-100 bg-white/80 p-5 shadow-lg">
+            <p className="text-sm text-gray-500">
               Hari Ini
             </p>
 
-            <h2 className="mt-3 text-4xl font-bold text-blue-700">
+            <h2 className="mt-2 text-2xl font-bold">
               {todayItems.length}
             </h2>
           </div>
 
-          <div className="rounded-3xl border border-red-200 bg-white/80 p-5 shadow-xl">
-            <p className="text-sm font-medium text-gray-500">
+          <div className="rounded-3xl border border-green-100 bg-white/80 p-5 shadow-lg">
+            <p className="text-sm text-gray-500">
               Terlewat
             </p>
 
-            <h2 className="mt-3 text-4xl font-bold text-red-700">
+            <h2 className="mt-2 text-2xl font-bold">
               {missedItems.length}
             </h2>
           </div>
 
-          <div className="rounded-3xl border border-emerald-200 bg-white/80 p-5 shadow-xl">
-            <p className="text-sm font-medium text-gray-500">
+          <div className="rounded-3xl border border-green-100 bg-white/80 p-5 shadow-lg">
+            <p className="text-sm text-gray-500">
               Selesai
             </p>
 
-            <h2 className="mt-3 text-4xl font-bold text-emerald-700">
+            <h2 className="mt-2 text-2xl font-bold">
               {completedItems.length}
             </h2>
           </div>
@@ -669,47 +754,103 @@ export default function KalenderPage() {
 
         {/* FILTER */}
         <section className="mb-6 rounded-[28px] border border-green-100 bg-white/80 p-5 shadow-xl">
-
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => setShowFilterPanel((prev) => !prev)}
+                className={`flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 text-sm font-bold transition ${
+                  showFilterPanel
+                    ? "border-green-500 bg-green-600 text-white shadow-lg"
+                    : "border-green-200 bg-white text-green-700 hover:bg-green-50"
+                }`}
+              >
+                <Filter size={17} />
+                Filter
+                {activeFilters.length > 0 && (
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${
+                    showFilterPanel
+                      ? "bg-white text-green-700"
+                      : "bg-green-100 text-green-700"
+                  }`}>
+                    {activeFilters.length}
+                  </span>
+                )}
+              </button>
 
-            <div>
-              <h2 className="text-xl font-bold">
-                Filter Kalender
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Pilih lahan tertentu untuk
-                melihat jadwal aktivitas.
-              </p>
+              {activeFilters.length === 0 ? (
+                <p className="text-sm font-medium text-gray-500">
+                  Belum ada filter aktif.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {activeFilters.map((filter) => (
+                    <span
+                      key={filter.key}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700"
+                    >
+                      {filter.label}
+                      <button
+                        type="button"
+                        onClick={() => removeFilter(filter.key)}
+                        className="rounded-full p-0.5 transition hover:bg-green-200"
+                        aria-label={`Hapus filter ${filter.label}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <select
-              value={selectedLahanId}
-              onChange={(e) =>
-                setSelectedLahanId(
-                  e.target.value
-                )
-              }
-              className="w-full rounded-2xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:ring-2 focus:ring-green-500 lg:w-80"
-            >
-              <option value="semua">
-                Semua Lahan
-              </option>
-
-              {jadwalList.map((jadwal) => (
-                <option
-                  key={jadwal.id}
-                  value={jadwal.lahan_id}
-                >
-                  {jadwal.lahan?.lokasi}
-                </option>
-              ))}
-            </select>
+            {activeFilters.length > 0 && (
+              <button
+                type="button"
+                onClick={resetFilter}
+                className="rounded-2xl border border-green-200 bg-white px-4 py-2 text-sm font-bold text-green-700 transition hover:bg-green-50"
+              >
+                Reset Semua
+              </button>
+            )}
           </div>
+
+          {showFilterPanel && (
+            <div className="mt-5 grid grid-cols-1 gap-4 rounded-[24px] border border-green-100 bg-green-50/40 p-4 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Filter Lahan
+                </label>
+
+                <select
+                  value={selectedLahanId}
+                  onChange={(e) =>
+                    setSelectedLahanId(
+                      e.target.value
+                    )
+                  }
+                  className="w-full rounded-2xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="semua">
+                    Semua Lahan
+                  </option>
+
+                  {jadwalList.map((jadwal) => (
+                    <option
+                      key={jadwal.id}
+                      value={jadwal.lahan_id}
+                    >
+                      {jadwal.lahan?.lokasi}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* CALENDAR */}
-        <section className="rounded-[32px] border border-green-100 bg-white/80 p-5 shadow-2xl backdrop-blur-xl">
+        <section className="rounded-[28px] border border-green-100 bg-white/80 p-5 shadow-xl">
 
           <div className="mb-6 flex items-center justify-between">
 
@@ -964,18 +1105,35 @@ export default function KalenderPage() {
                         </p>
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
+                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                        {canInputLogFromCalendar(item, selectedDate, today, user) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
 
-                          router.push(
-                            `/lahan/${item.lahan_id}`
-                          )
-                        }}
-                        className="rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg"
-                      >
-                        Detail Lahan
-                      </button>
+                              router.push(
+                                `/log/tambah?lahan_id=${item.lahan_id}&tanggal=${selectedDate}`
+                              )
+                            }}
+                            className="rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg"
+                          >
+                            Input Log
+                          </button>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+
+                            router.push(
+                              `/lahan/${item.lahan_id}`
+                            )
+                          }}
+                          className="rounded-2xl border border-green-200 bg-white px-5 py-3 text-sm font-semibold text-green-700 shadow-sm transition hover:bg-green-50"
+                        >
+                          Detail Lahan
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1088,6 +1246,7 @@ export default function KalenderPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </main>
   )

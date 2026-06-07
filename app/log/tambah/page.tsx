@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import RiceShareTopNav from "@/components/RiceShareTopNav"
 
 type UserProfile = {
   id: string
@@ -126,7 +127,12 @@ function buildTimeline(
 
     if (overrides[template.key]) {
       endDate = overrides[template.key]
+
       if (template.startOffset === template.endOffset) {
+        startDate = endDate
+      }
+
+      if (endDate < startDate) {
         startDate = endDate
       }
     }
@@ -147,21 +153,30 @@ function isDateInRange(date: string, startDate: string, endDate: string) {
   return date >= startDate && date <= endDate
 }
 
-// Alias fleksibel per template key — sama polanya dengan kalender
+// Alias ketat per template key.
+// Jangan pakai alias terlalu umum seperti "pemupukan" atau "gulma" untuk mengecek duplikat,
+// karena satu tanggal bisa punya beberapa aktivitas yang overlap.
+function normalizeActivityText(value?: string | null) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
 const AKTIVITAS_ALIASES: Record<string, string[]> = {
-  mulai_tanam:                    ["mulai tanam", "tanam", "pindah tanam", "mulai"],
-  cek_adaptasi_bibit:             ["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
-  pemupukan_1:                    ["pemupukan 1", "pemupukan", "pupuk", "pemupukan pertama"],
-  pantau_pertumbuhan_awal:        ["pantau pertumbuhan awal", "pantau pertumbuhan", "pertumbuhan awal", "pantau"],
-  persiapan_pengendalian_gulma:   ["persiapan pengendalian gulma", "pengendalian gulma", "gulma", "persiapan gulma"],
-  bersihkan_gulma:                ["bersihkan gulma", "bersih gulma", "cabut gulma"],
-  pemupukan_2:                    ["pemupukan 2", "pemupukan kedua", "pupuk 2"],
-  perawatan_lanjutan:             ["perawatan lanjutan", "perawatan", "lanjutan", "pemeliharaan"],
-  cek_hama:                       ["cek hama", "hama", "pengecekan hama", "semprot hama", "pestisida", "penanganan hama"],
-  menjelang_panen:                ["menjelang panen", "persiapan panen", "pra panen"],
-  panen_estimasi:                 ["panen estimasi", "panen", "panen raya", "panen selesai"],
-  masa_istirahat:                 ["masa istirahat", "istirahat", "jeda", "pengolahan lahan"],
-  siap_tanam_kembali:             ["siap tanam kembali", "siap tanam", "tanam kembali"],
+  mulai_tanam: ["mulai tanam", "tanam", "penanaman"],
+  cek_adaptasi_bibit: ["cek adaptasi bibit", "adaptasi bibit", "cek bibit", "bibit"],
+  pemupukan_1: ["pemupukan 1", "pupuk 1", "pemupukan pertama"],
+  pantau_pertumbuhan_awal: ["pantau pertumbuhan awal", "pantau pertumbuhan", "pertumbuhan awal", "pantau"],
+  persiapan_pengendalian_gulma: ["persiapan pengendalian gulma", "pengendalian gulma", "persiapan gulma"],
+  bersihkan_gulma: ["bersihkan gulma", "bersih gulma", "pembersihan gulma"],
+  pemupukan_2: ["pemupukan 2", "pupuk 2", "pemupukan kedua"],
+  perawatan_lanjutan: ["perawatan lanjutan", "perawatan", "pemeliharaan lanjutan"],
+  cek_hama: ["cek hama", "pengecekan hama", "pengendalian hama"],
+  menjelang_panen: ["menjelang panen", "persiapan panen", "pra panen"],
+  panen_estimasi: ["panen estimasi", "panen", "input panen", "hasil panen"],
+  masa_istirahat: ["masa istirahat", "istirahat"],
+  siap_tanam_kembali: ["siap tanam kembali", "siap tanam", "tanam kembali"],
 }
 
 function aktivitasSudahDicatat(
@@ -169,9 +184,14 @@ function aktivitasSudahDicatat(
   templateKey: string,
   templateLabel: string
 ): boolean {
-  const j = jenisAktivitas.toLowerCase().trim()
-  const aliases = AKTIVITAS_ALIASES[templateKey] || [templateLabel.toLowerCase()]
-  return aliases.some((alias) => j.includes(alias) || alias.includes(j))
+  const normalizedJenis = normalizeActivityText(jenisAktivitas)
+  const normalizedLabel = normalizeActivityText(templateLabel)
+
+  if (!normalizedJenis) return false
+  if (normalizedJenis === normalizedLabel) return true
+
+  const aliases = AKTIVITAS_ALIASES[templateKey] || []
+  return aliases.some((alias) => normalizeActivityText(alias) === normalizedJenis)
 }
 
 // ─── Komponen utama dipisah agar useSearchParams bisa dibungkus Suspense ───
@@ -226,24 +246,88 @@ function TambahLogAktivitasContent() {
       ]
     }
 
-    return timeline.filter((item) => {
-      const sedangBerjalan = isDateInRange(tanggal, item.startDate, item.endDate)
+    return timeline
+      .filter((item) => {
+        const sedangBerjalan = isDateInRange(tanggal, item.startDate, item.endDate)
 
-      // Cek apakah aktivitas ini sudah pernah dicatat pakai pencocokan fleksibel
-      const sudahAdaLog = aktivitasLogs.some((log) => {
-  return (
-    aktivitasSudahDicatat(
-      log.jenis_aktivitas,
-      item.key,
-      item.label
-    ) &&
-    log.tanggal === tanggal
-  )
-})
+        // Cek hanya aktivitas yang benar-benar sama pada tanggal yang sama.
+        // Ini penting untuk tanggal overlap, misalnya Pemupukan 1 dan Pantau sama-sama ada di 5 Juni.
+        const sudahAdaLog = aktivitasLogs.some((log) => {
+          return (
+            !!log.tanggal &&
+            log.tanggal >= item.startDate &&
+            aktivitasSudahDicatat(
+              log.jenis_aktivitas,
+              item.key,
+              item.label
+            )
+          )
+        })
 
-      return sedangBerjalan && !sudahAdaLog
-    })
+        return sedangBerjalan && !sudahAdaLog
+      })
+      .sort((a, b) => {
+        const aExactStart = a.startDate === tanggal ? 0 : 1
+        const bExactStart = b.startDate === tanggal ? 0 : 1
+
+        if (aExactStart !== bExactStart) {
+          return aExactStart - bExactStart
+        }
+
+        const aIndex = timelineTemplates.findIndex((template) => template.key === a.key)
+        const bIndex = timelineTemplates.findIndex((template) => template.key === b.key)
+
+        return aIndex - bIndex
+      })
   }, [timeline, tanggal, aktivitasLogs])
+
+  const pendingActivities = useMemo(() => {
+    if (timeline.length === 0) return []
+
+    return timeline
+      .filter((item) => {
+        if (item.startDate > today) return false
+
+        const sudahAdaLog = aktivitasLogs.some((log) => {
+          return (
+            !!log.tanggal &&
+            log.tanggal >= item.startDate &&
+            aktivitasSudahDicatat(
+              log.jenis_aktivitas,
+              item.key,
+              item.label
+            )
+          )
+        })
+
+        return !sudahAdaLog
+      })
+      .sort((a, b) => {
+        if (a.startDate !== b.startDate) {
+          return a.startDate.localeCompare(b.startDate)
+        }
+
+        const aIndex = timelineTemplates.findIndex((template) => template.key === a.key)
+        const bIndex = timelineTemplates.findIndex((template) => template.key === b.key)
+
+        return aIndex - bIndex
+      })
+  }, [timeline, aktivitasLogs, today])
+
+  const handleSelectPendingActivity = (item: TimelineItem) => {
+    const tanggalAktivitas =
+      item.endDate < today
+        ? item.startDate
+        : today >= item.startDate && today <= item.endDate
+        ? today
+        : item.startDate
+
+    setTanggal(tanggalAktivitas)
+    setJenisAktivitas(item.label)
+
+    const formElement = document.getElementById("form-input-log-aktivitas")
+    formElement?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   const selectedLahan = useMemo(() => {
     return lahanList.find((lahan) => lahan.id === lahanId) || null
@@ -276,10 +360,19 @@ function TambahLogAktivitasContent() {
 
   useEffect(() => {
     if (availableActivities.length === 1) {
-      setJenisAktivitas(availableActivities[0].label)
-    } else {
-      setJenisAktivitas("")
+      setJenisAktivitas((prev) => prev || availableActivities[0].label)
+      return
     }
+
+    setJenisAktivitas((prev) => {
+      if (!prev) return ""
+
+      const masihTersedia = availableActivities.some(
+        (item) => item.label === prev
+      )
+
+      return masihTersedia ? prev : ""
+    })
   }, [availableActivities])
 
   const fetchSelectedLahanData = async (selectedLahanId: string) => {
@@ -488,17 +581,10 @@ function TambahLogAktivitasContent() {
     setShowSuccessModal(true)
   }
 
-  const handleInputAgain = async () => {
-    const lastLahanId = lahanId
-    setTanggal("")
-    setJenisAktivitas("")
-    setDeskripsi("")
-    setBuktiFile(null)
-    setFileInputKey((prev) => prev + 1)
+  const handleSuccessOk = () => {
+    resetForm()
     setShowSuccessModal(false)
-    if (lastLahanId) {
-      await fetchSelectedLahanData(lastLahanId)
-    }
+    router.replace("/log/tambah")
   }
 
   const handleExit = () => {
@@ -509,7 +595,7 @@ function TambahLogAktivitasContent() {
 
   if (checkingUser) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 p-6 text-gray-900">
+      <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
         Loading...
       </main>
     )
@@ -520,23 +606,35 @@ function TambahLogAktivitasContent() {
   const isPengelola = user.role === "pengelola"
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 via-lime-50 to-emerald-100 text-gray-900">
-      <div className="mx-auto w-full max-w-4xl px-4 py-4 md:px-6 md:py-6">
-        <header className="mb-6 overflow-hidden rounded-[30px] border border-green-100 bg-white/80 p-5 shadow-2xl backdrop-blur-xl sm:flex sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold tracking-wide text-green-700">RiceShare</p>
-            <h1 className="text-2xl font-bold">Tambah Log Aktivitas</h1>
-            <p className="text-sm text-gray-500">
-             Catat aktivitas pengelolaan lahan sesuai jadwal tanam.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/log")}
-            className="rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-green-50"
-          >
-            Riwayat Log
-          </button>
-        </header>
+    <main className="min-h-screen bg-[#f7faf5] text-gray-950">
+      <RiceShareTopNav user={user} />
+
+      <div className="pb-28 lg:pb-10">
+        <div className="mx-auto w-full max-w-4xl px-4 py-5 md:px-6 md:py-6">
+          <section className="mb-6 rounded-[30px] border border-gray-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.07)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-green-700">
+                  RiceShare
+                </p>
+
+                <h1 className="mt-1 text-3xl font-bold">
+                  Tambah Log Aktivitas
+                </h1>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  Catat aktivitas pengelolaan lahan sesuai jadwal tanam.
+                </p>
+              </div>
+
+              <button
+                onClick={() => router.push("/log")}
+                className="rounded-2xl border border-green-100 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-green-50"
+              >
+                Riwayat Log
+              </button>
+            </div>
+          </section>
 
         {!isPengelola ? (
           <section className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
@@ -553,7 +651,7 @@ function TambahLogAktivitasContent() {
           </section>
         ) : (
           <section className="rounded-[28px] border border-green-100 bg-white/90 p-6 shadow-xl backdrop-blur-sm">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="form-input-log-aktivitas" onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="mb-1 block text-sm font-medium">
                   Pilih Lahan <span className="text-red-500">*</span>
@@ -597,6 +695,79 @@ function TambahLogAktivitasContent() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   ⚠️ Lahan ini belum memiliki jadwal tanam aktif. Kamu tetap bisa mencatat aktivitas bebas.
                 </div>
+              )}
+
+              {lahanId && !loadingLahanDetail && jadwalTanam && (
+                <section className="rounded-[24px] border border-green-100 bg-green-50/50 p-4">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">
+                        Aktivitas Belum Dicatat
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        Pilih aktivitas yang terlewat atau sedang berjalan, lalu form akan terisi otomatis.
+                      </p>
+                    </div>
+
+                    <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-bold text-green-700 ring-1 ring-green-100">
+                      {pendingActivities.length} aktivitas
+                    </span>
+                  </div>
+
+                  {pendingActivities.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-green-200 bg-white p-4 text-sm font-semibold text-green-700">
+                      Semua aktivitas sampai hari ini sudah dicatat.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {pendingActivities.map((item) => {
+                        const isOverdue = item.endDate < today
+                        const isActive =
+                          today >= item.startDate && today <= item.endDate
+
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => handleSelectPendingActivity(item)}
+                            className="rounded-2xl border border-green-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-green-300 hover:bg-green-50"
+                          >
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                              <div>
+                                <h3 className="font-bold text-gray-900">
+                                  {item.label}
+                                </h3>
+                                <p className="mt-1 text-sm text-gray-500">
+                                  {item.tanggalText}
+                                </p>
+                              </div>
+
+                              <span
+                                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                                  isOverdue
+                                    ? "bg-red-50 text-red-600"
+                                    : isActive
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-amber-50 text-amber-600"
+                                }`}
+                              >
+                                {isOverdue
+                                  ? "Terlewat"
+                                  : isActive
+                                  ? "Hari ini"
+                                  : "Mendatang"}
+                              </span>
+                            </div>
+
+                            <span className="text-sm font-bold text-green-700">
+                              Catat aktivitas →
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
               )}
 
               {lahanId && !loadingLahanDetail && (
@@ -644,7 +815,7 @@ function TambahLogAktivitasContent() {
                           <option value="">Pilih aktivitas</option>
                           {availableActivities.map((item) => (
                             <option key={item.key} value={item.label}>
-                              {item.label}
+                              {item.label}{item.tanggalText ? ` — ${item.tanggalText}` : ""}
                             </option>
                           ))}
                         </select>
@@ -713,6 +884,7 @@ function TambahLogAktivitasContent() {
             </form>
           </section>
         )}
+        </div>
       </div>
 
       {showSuccessModal && (
@@ -733,10 +905,10 @@ function TambahLogAktivitasContent() {
                 Lihat Riwayat
               </button>
               <button
-                onClick={handleInputAgain}
+                onClick={handleSuccessOk}
                 className="w-full rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 px-5 py-3 font-semibold text-white shadow-lg transition-all hover:scale-[1.02] disabled:opacity-60 sm:w-1/2"
               >
-                Input Lagi
+                Oke
               </button>
             </div>
           </div>
@@ -746,12 +918,11 @@ function TambahLogAktivitasContent() {
   )
 }
 
-// ─── Wrapper dengan Suspense — INI yang di-export sebagai page ───
 export default function TambahLogAktivitasPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-gray-50 p-6 text-gray-900">
+        <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
           Loading...
         </main>
       }
