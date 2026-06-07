@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ChevronLeft,
@@ -448,7 +448,7 @@ function canInputLogFromCalendar(
   )
 }
 
-export default function KalenderPage() {
+function KalenderContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -1249,5 +1249,23 @@ export default function KalenderPage() {
       </div>
       </div>
     </main>
+  )
+}
+
+export default function KalenderPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
+          <div className="rounded-3xl bg-white px-8 py-6 shadow-xl">
+            <p className="text-lg font-semibold text-green-700">
+              Memuat kalender...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <KalenderContent />
+    </Suspense>
   )
 }
