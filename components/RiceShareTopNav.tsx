@@ -455,14 +455,26 @@ export default function RiceShareTopNav({
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/notifikasi")}
-              className="relative flex h-11 w-11 items-center justify-center rounded-full border border-green-100 bg-white text-gray-700 shadow-sm transition hover:bg-green-50"
+              className="relative flex h-11 w-11 items-center justify-center rounded-full border border-green-100 bg-white text-gray-700 shadow-sm transition hover:bg-green-50 hover:text-green-700"
             >
-              <Bell size={20} />
+              {/* Bell icon dengan animasi goyang kalau ada notif */}
+              <span className={displayedNotificationCount > 0 ? "animate-[wiggle_1s_ease-in-out_infinite]" : ""}>
+                <Bell
+                  size={20}
+                  className={displayedNotificationCount > 0 ? "text-green-700" : "text-gray-500"}
+                />
+              </span>
 
+              {/* Badge merah — pakai overflow-visible agar tidak terpotong */}
               {displayedNotificationCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
-                  {displayedNotificationCount}
-                </span>
+                <>
+                  {/* Pulse ring di belakang */}
+                  <span className="absolute -right-1 -top-1 h-4 w-4 animate-ping rounded-full bg-red-400 opacity-60" />
+                  {/* Badge utama */}
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow-md ring-2 ring-white">
+                    {displayedNotificationCount > 99 ? "99+" : displayedNotificationCount}
+                  </span>
+                </>
               )}
             </button>
 
