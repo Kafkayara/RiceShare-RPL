@@ -744,12 +744,6 @@ export default function DashboardPage() {
                   })}
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center gap-4 text-xs font-medium text-gray-500">
-                  <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-green-500" />Kegiatan</span>
-                  <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-400" />Perhatian</span>
-                  <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Terlewat</span>
-                </div>
-
                 <button onClick={() => router.push("/kalender")} className="mt-4 flex w-full items-center justify-center gap-2 text-sm font-black text-green-700">
                   Lihat detail kalender <ChevronRight size={16} />
                 </button>
@@ -1002,14 +996,7 @@ export default function DashboardPage() {
                   )
                 })}
               </div>
-
-              <div className="mt-5 flex flex-wrap items-center gap-4 text-xs font-medium text-gray-500">
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-green-500" />Kegiatan</span>
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-400" />Perhatian</span>
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Terlewat</span>
-              </div>
-
-              <button onClick={() => router.push("/kalender")} className="mt-4 flex w-full items-center justify-center gap-2 text-sm font-black text-green-700">
+<button onClick={() => router.push("/kalender")} className="mt-4 flex w-full items-center justify-center gap-2 text-sm font-black text-green-700">
                 Lihat detail kalender <ChevronRight size={16} />
               </button>
             </div>

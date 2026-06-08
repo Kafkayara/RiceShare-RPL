@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { syncLahanStatus } from "@/lib/syncLahanStatus"
@@ -413,8 +413,8 @@ function getTimelineItemIndex(key: string) {
   return timelineTemplates.findIndex((template) => template.key === key)
 }
 
-function getEditableTimelineItems(timeline: TimelineItem[]) {
-  if (timeline.length === 0) return []
+function getActiveTimelineIndex(timeline: TimelineItem[]) {
+  if (timeline.length === 0) return -1
 
   const currentIndex = timeline.findIndex(
     (item) => item.status === "berjalan"
@@ -424,20 +424,84 @@ function getEditableTimelineItems(timeline: TimelineItem[]) {
     (item) => item.status === "belum"
   )
 
-  const activeIndex =
-    currentIndex >= 0
-      ? currentIndex
-      : fallbackIndex >= 0
-      ? fallbackIndex
-      : timeline.length - 1
+  return currentIndex >= 0
+    ? currentIndex
+    : fallbackIndex >= 0
+    ? fallbackIndex
+    : timeline.length - 1
+}
+
+function getEditableTimelineItems(timeline: TimelineItem[]) {
+  const activeIndex = getActiveTimelineIndex(timeline)
+
+  if (activeIndex < 0) return []
 
   return timeline.filter((_, index) => {
     return Math.abs(index - activeIndex) <= 1
   })
 }
 
+function getTimelineEditRange(
+  timeline: TimelineItem[],
+  item: TimelineItem,
+  today: string
+) {
+  const activeIndex = getActiveTimelineIndex(timeline)
+  const itemIndex = getTimelineItemIndex(item.key)
 
-export default function DetailLahanPage() {
+  const fallbackMin = item.startDate
+  const fallbackMax = item.endDate
+
+  if (activeIndex < 0 || itemIndex < 0) {
+    return {
+      min: fallbackMin,
+      max: fallbackMax,
+      type: "range" as const,
+      description: "Tanggal edit mengikuti range tahap ini.",
+    }
+  }
+
+  if (itemIndex < activeIndex) {
+    return {
+      min: item.startDate,
+      max: today,
+      type: "previous" as const,
+      description:
+        "Tahap sebelumnya adalah koreksi data. Tanggal maksimal adalah hari ini.",
+    }
+  }
+
+  if (itemIndex === activeIndex) {
+    return {
+      min: item.startDate,
+      max: item.endDate,
+      type: "current" as const,
+      description:
+        "Tahap saat ini bisa disesuaikan sampai akhir range tahap ini.",
+    }
+  }
+
+  return {
+    min: today,
+    max: item.endDate,
+    type: "next" as const,
+    description:
+      "Tahap selanjutnya bisa dimajukan paling awal ke hari ini.",
+  }
+}
+
+function isDateWithinRange(date: string, min: string, max: string) {
+  if (!date || !min || !max) return false
+
+  return date >= min && date <= max
+}
+
+function getPanenEstimasiEndDate(timeline: TimelineItem[]) {
+  return timeline.find((item) => item.key === "panen_estimasi")?.endDate || null
+}
+
+
+function DetailLahanContent() {
   const router = useRouter()
 
   const params = useParams()
@@ -652,58 +716,117 @@ useEffect(() => {
 
     if (!jadwalTerbaru) return
 
+    const nextTanggalMulai = canEditTanggalMulai
+      ? editTanggalMulai
+      : jadwalTerbaru.tanggal_mulai
+
+    if (!nextTanggalMulai) {
+      alert("Tanggal mulai tidak boleh kosong.")
+      return
+    }
+
     const nextTimelineOverrides: TimelineOverrides = {
       ...(jadwalTerbaru.timeline_overrides || {}),
     }
 
-    const editedIndexes = editableTimelineDateItems
-      .map((item) => getTimelineItemIndex(item.key))
-      .filter((index) => index >= 0)
+    const changedIndexes: number[] = []
 
-    const lastEditedIndex =
-      editedIndexes.length > 0
-        ? Math.max(...editedIndexes)
+    if (
+      canEditTanggalMulai &&
+      nextTanggalMulai !== jadwalTerbaru.tanggal_mulai
+    ) {
+      changedIndexes.push(0)
+    }
+
+    for (const item of editableTimelineDateItems) {
+      const nextDate = editTimelineDates[item.key] || ""
+      const editRange = getTimelineEditRange(timeline, item, today)
+
+      if (!nextDate) {
+        if (nextTimelineOverrides[item.key]) {
+          delete nextTimelineOverrides[item.key]
+          changedIndexes.push(getTimelineItemIndex(item.key))
+        }
+
+        continue
+      }
+
+      if (!isDateWithinRange(nextDate, editRange.min, editRange.max)) {
+        alert(
+          `${item.label} harus berada pada rentang ${formatDateId(
+            editRange.min
+          )} sampai ${formatDateId(editRange.max)}.`
+        )
+        return
+      }
+
+      if (nextDate !== item.endDate) {
+        nextTimelineOverrides[item.key] = nextDate
+        changedIndexes.push(getTimelineItemIndex(item.key))
+      }
+    }
+
+    const lastChangedIndex =
+      changedIndexes.length > 0
+        ? Math.max(...changedIndexes.filter((index) => index >= 0))
         : -1
 
-    editableTimelineDateItems.forEach((item) => {
-      const nextDate = editTimelineDates[item.key]
-
-      if (nextDate) {
-        nextTimelineOverrides[item.key] = nextDate
-      } else {
-        delete nextTimelineOverrides[item.key]
-      }
-    })
-
-    if (lastEditedIndex >= 0) {
+    if (lastChangedIndex >= 0) {
       timelineTemplates.forEach((template, index) => {
-        if (index > lastEditedIndex) {
+        if (index > lastChangedIndex) {
           delete nextTimelineOverrides[template.key]
         }
       })
     }
 
-    await supabase
+    const recalculatedTimeline = buildTimeline(
+      nextTanggalMulai,
+      today,
+      nextTimelineOverrides,
+      aktivitasLogs
+    )
+
+    const nextTanggalSelesai =
+      getPanenEstimasiEndDate(recalculatedTimeline) ||
+      jadwalTerbaru.tanggal_selesai
+
+    const { error } = await supabase
       .from("jadwal_tanam")
       .update({
-        tanggal_mulai: canEditTanggalMulai
-          ? editTanggalMulai
-          : jadwalTerbaru.tanggal_mulai,
+        tanggal_mulai: nextTanggalMulai,
+        tanggal_selesai: nextTanggalSelesai,
         varietas_padi: editVarietasPadi,
         jumlah_benih:
-  editJumlahBenih.trim() === ""
-    ? null
-    : Number(editJumlahBenih),
+          editJumlahBenih.trim() === ""
+            ? null
+            : Number(editJumlahBenih),
         catatan: editCatatan,
         timeline_overrides: nextTimelineOverrides,
       })
       .eq("id", jadwalTerbaru.id)
 
+    if (error) {
+      console.log("UPDATE JADWAL ERROR:", error)
+      alert(
+        [
+          "Gagal menyimpan perubahan jadwal.",
+          error.message ? `Pesan: ${error.message}` : "",
+          error.details ? `Detail: ${error.details}` : "",
+          error.hint ? `Hint: ${error.hint}` : "",
+          error.code ? `Kode: ${error.code}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      )
+      return
+    }
+
+    await syncLahanStatus()
     await fetchLahanDetail()
 
     setShowEditModal(false)
 
-    alert("Jadwal berhasil diperbarui")
+    alert("Jadwal berhasil diperbarui dan timeline sudah direkalkulasi.")
   } catch (error) {
     console.error(error)
     alert("Gagal menyimpan perubahan")
@@ -1288,35 +1411,49 @@ useEffect(() => {
       Tidak ada tahap timeline yang bisa diedit saat ini.
     </div>
   ) : (
-    editableTimelineDateItems.map((item) => (
-      <div key={item.key}>
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <label className="block text-sm text-gray-600">
-            {item.label}
-          </label>
+    editableTimelineDateItems.map((item) => {
+      const editRange = getTimelineEditRange(timeline, item, today)
 
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-            {item.status}
-          </span>
+      return (
+        <div key={item.key}>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <label className="block text-sm text-gray-600">
+              {item.label}
+            </label>
+
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+              {item.status}
+            </span>
+          </div>
+
+          <input
+            type="date"
+            value={editTimelineDates[item.key] || ""}
+            min={editRange.min}
+            max={editRange.max}
+            onChange={(e) =>
+              setEditTimelineDates((prev) => ({
+                ...prev,
+                [item.key]: e.target.value,
+              }))
+            }
+            className="w-full rounded-xl border p-3"
+          />
+
+          <p className="mt-1 text-xs text-gray-500">
+            Jadwal saat ini: {item.tanggalText}
+          </p>
+
+          <p className="mt-1 text-xs text-green-700">
+            Batas edit: {formatDateId(editRange.min)} - {formatDateId(editRange.max)}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500">
+            {editRange.description}
+          </p>
         </div>
-
-        <input
-          type="date"
-          value={editTimelineDates[item.key] || ""}
-          onChange={(e) =>
-            setEditTimelineDates((prev) => ({
-              ...prev,
-              [item.key]: e.target.value,
-            }))
-          }
-          className="w-full rounded-xl border p-3"
-        />
-
-        <p className="mt-1 text-xs text-gray-500">
-          Jadwal saat ini: {item.tanggalText}
-        </p>
-      </div>
-    ))
+      )
+    })
   )}
 </div>
 <div className="mt-6 flex justify-end gap-3">
@@ -1347,5 +1484,23 @@ useEffect(() => {
   
 )}
     </main>
+  )
+}
+
+export default function DetailLahanPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#f7faf5] p-6 text-gray-950">
+          <div className="rounded-3xl bg-white px-8 py-6 shadow-xl">
+            <p className="text-lg font-semibold text-green-700">
+              Memuat detail lahan...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <DetailLahanContent />
+    </Suspense>
   )
 }
