@@ -472,7 +472,7 @@ export default function NotifikasiPage() {
 
   return (
     <main className="min-h-screen bg-[#f7faf5] text-gray-950">
-      <RiceShareTopNav user={user} notificationCount={summary.urgent + summary.today} />
+      <RiceShareTopNav user={user} />
 
       <div className="pb-28 lg:pb-10">
         <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-6 md:py-7">

@@ -63,7 +63,6 @@ const mainMenus = [
   },
 ]
 
-
 const ownerOnlyMenus = [
   {
     icon: UsersRound,
@@ -72,9 +71,6 @@ const ownerOnlyMenus = [
     match: ["/pengelola"],
   },
 ]
-
-
-type NotificationPriority = "urgent" | "today" | "soon" | "info"
 
 type TimelineOverrides = Record<string, string>
 
@@ -239,8 +235,6 @@ function timelineItemSudahDicatat(item: TimelineItem, logs: AktivitasLog[]) {
 }
 
 async function getNotificationBadgeCount() {
-  await syncLahanStatus()
-
   const today = getToday()
   let count = 0
 
@@ -281,6 +275,7 @@ async function getNotificationBadgeCount() {
     const timeline = buildTimeline(jadwal.tanggal_mulai, overrides)
     const aktivitasLogs = logsByLahan[(lahan as any).id] || []
 
+    // 1. Pengecekan dari Jadwal Lini Masa (Timeline)
     timeline
       .filter((item) => item.startDate <= today)
       .filter((item) => !timelineItemSudahDicatat(item, aktivitasLogs))
@@ -293,6 +288,7 @@ async function getNotificationBadgeCount() {
         }
       })
 
+    // 2. Pengecekan Status Manual (Dikembalikan, tapi bug perhitungan ganda dihapus)
     const status = (lahan as any).status
     const tglPanenEst = overrides["panen_estimasi"] || addDays(jadwal.tanggal_mulai, 105)
     const tglMenjelang = overrides["menjelang_panen"] || addDays(jadwal.tanggal_mulai, 70)
@@ -300,10 +296,6 @@ async function getNotificationBadgeCount() {
     const hariMenujuMenjelang = diffDays(today, tglMenjelang)
 
     if (status === "menjelang_panen" && hariMenujuPanen <= 0) {
-      count += 1
-    }
-
-    if (status === "menjelang_panen" && hariMenujuPanen === 0) {
       count += 1
     }
 
@@ -319,7 +311,6 @@ async function getNotificationBadgeCount() {
   return count
 }
 
-
 export default function RiceShareTopNav({
   user,
   notificationCount,
@@ -330,8 +321,16 @@ export default function RiceShareTopNav({
   const [isMobile, setIsMobile] = useState(false)
   const [internalNotificationCount, setInternalNotificationCount] = useState(0)
 
-  const displayedNotificationCount =
-    notificationCount ?? internalNotificationCount
+  useEffect(() => {
+    const hasSynced = sessionStorage.getItem("riceshare_synced_session")
+    if (!hasSynced) {
+      syncLahanStatus()
+        .then(() => {
+          sessionStorage.setItem("riceshare_synced_session", "true")
+        })
+        .catch((error) => console.log("Init Sync Error:", error))
+    }
+  }, [])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1099px)")
@@ -391,6 +390,7 @@ export default function RiceShareTopNav({
 
   const handleLogout = () => {
     localStorage.removeItem("riceshare_user")
+    sessionStorage.removeItem("riceshare_synced_session")
     router.push("/")
   }
 
@@ -399,11 +399,12 @@ export default function RiceShareTopNav({
       ? [...mainMenus, ...ownerOnlyMenus]
       : mainMenus
 
+  const displayedNotificationCount = notificationCount ?? internalNotificationCount
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-green-100 bg-white/90 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-3 px-4 md:h-[86px] md:px-6">
-          {/* LOGO */}
           <button
             onClick={() => router.push("/dashboard")}
             className="flex items-center gap-3"
@@ -422,7 +423,6 @@ export default function RiceShareTopNav({
             </div>
           </button>
 
-          {/* TOP MENU */}
           {!isMobile && (
           <nav className="flex flex-1 items-center justify-center gap-2 overflow-x-auto px-2">
             {menus.map((item) => {
@@ -451,13 +451,11 @@ export default function RiceShareTopNav({
           </nav>
           )}
 
-          {/* RIGHT ACTIONS */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/notifikasi")}
               className="relative flex h-11 w-11 items-center justify-center rounded-full border border-green-100 bg-white text-gray-700 shadow-sm transition hover:bg-green-50 hover:text-green-700"
             >
-              {/* Bell icon dengan animasi goyang kalau ada notif */}
               <span className={displayedNotificationCount > 0 ? "animate-[wiggle_1s_ease-in-out_infinite]" : ""}>
                 <Bell
                   size={20}
@@ -465,12 +463,9 @@ export default function RiceShareTopNav({
                 />
               </span>
 
-              {/* Badge merah — pakai overflow-visible agar tidak terpotong */}
               {displayedNotificationCount > 0 && (
                 <>
-                  {/* Pulse ring di belakang */}
                   <span className="absolute -right-1 -top-1 h-4 w-4 animate-ping rounded-full bg-red-400 opacity-60" />
-                  {/* Badge utama */}
                   <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow-md ring-2 ring-white">
                     {displayedNotificationCount > 99 ? "99+" : displayedNotificationCount}
                   </span>
@@ -529,7 +524,6 @@ export default function RiceShareTopNav({
         </div>
       </header>
 
-      {/* MOBILE BOTTOM NAV */}
       {isMobile && (
         <nav
           className="border-t border-green-100 bg-white/95 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl"
